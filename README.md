@@ -45,19 +45,13 @@
 
 ## 后续更新
 
-本插件未来计划加入更多有趣的系统，例如：
-
-* **炼器系统**: 引入装备合成与强化系统。
-* **宗门扩展**: 增加宗门任务、宗门仓库、宗门贡献度等玩法。
-* **管理员工具**: 提供更便捷的方式修改游戏数据。
-* **钱庄系统**：修仙界的银行。
-* **娱乐玩法**：内置简单的小游戏消费灵石。
+本插件未来计划加入更多有趣的系统
 
 ## 贡献
 
 欢迎通过提 Issue 或 Pull Request 的方式贡献代码、报告 Bug 或提出宝贵的建议。
 
-本插件基于 [AstrBot](https://github.com/AstrBot/AstrBot) 的开源项目运行
+本插件基于 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的开源项目运行
 
 初始代码框架参考 [astrbot_plugin_xiuxian](https://github.com/oldPeter616/astrbot_plugin_xiuxian)(
-提交pr催更也没动静,所以想着自己试试)
+看提交pr催更也没动静,所以想着自己试试)
