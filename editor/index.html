@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>重生修仙游戏编辑器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 背景装饰元素 */
+        .background-decoration {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .floating-element {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .element-1 {
+            width: 100px;
+            height: 100px;
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .element-2 {
+            width: 150px;
+            height: 150px;
+            bottom: 15%;
+            right: 10%;
+            animation-delay: 2s;
+        }
+
+        .element-3 {
+            width: 80px;
+            height: 80px;
+            top: 40%;
+            right: 20%;
+            animation-delay: 4s;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg);
+            }
+            50% {
+                transform: translateY(-20px) rotate(180deg);
+            }
+        }
+
+        /* 主容器 */
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 800px;
+            width: 90%;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 标题 */
+        h1 {
+            color: #fff;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.2rem;
+            margin-bottom: 40px;
+        }
+
+        /* 卡片网格 */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+
+        /* 卡片样式 */
+        .card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 30px 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+
+        .card-title {
+            color: #fff;
+            font-size: 1.4rem;
+            margin-bottom: 10px;
+        }
+
+        .card-description {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 加载动画 */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .loading-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            color: white;
+            margin-top: 20px;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+<!-- 背景装饰元素 -->
+<div class="background-decoration">
+    <div class="floating-element element-1"></div>
+    <div class="floating-element element-2"></div>
+    <div class="floating-element element-3"></div>
+</div>
+
+<!-- 主容器 -->
+<div class="container">
+    <h1>🌸 重生修仙编辑器 🌸</h1>
+    <p class="subtitle">选择你要进入的工具编辑器界面</p>
+
+    <div class="card-grid">
+        <div class="card" onclick="loadInterface('MapEditor.html')">
+            <div class="card-icon">🗺️</div>
+            <h3 class="card-title">地图编辑器</h3>
+            <p class="card-description">创建和编辑你的修仙世界地图，定义各个区域和连接关系</p>
+        </div>
+
+        <!-- 可以在这里添加更多卡片 -->
+        <div class="card" onclick="loadInterface('coming-soon')">
+            <div class="card-icon">⚔️</div>
+            <h3 class="card-title">战斗系统</h3>
+            <p class="card-description">设置修仙世界中的战斗规则和技能体系</p>
+        </div>
+
+        <div class="card" onclick="loadInterface('coming-soon')">
+            <div class="card-icon">📚</div>
+            <h3 class="card-title">功法秘籍</h3>
+            <p class="card-description">创建各种修仙功法和秘籍系统</p>
+        </div>
+
+        <div class="card" onclick="loadInterface('coming-soon')">
+            <div class="card-icon">💰</div>
+            <h3 class="card-title">财产系统</h3>
+            <p class="card-description">管理修仙世界中的财产和任务系统</p>
+        </div>
+        <!--        后续还有怪物,材料,掉落物等等 ,尽量都搞出来编辑器,这样子增删东西会比较方便-->
+
+    </div>
+</div>
+
+<!-- 加载遮罩 -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div>
+        <div class="loader"></div>
+        <p class="loading-text">正在进入修仙世界...</p>
+    </div>
+</div>
+
+<script>
+    // 加载界面函数
+    function loadInterface(url) {
+        // 显示加载动画
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        loadingOverlay.classList.add('active');
+
+        // 如果是真实链接，则跳转
+        if (url !== 'coming-soon') {
+            setTimeout(() => {
+                window.location.href = url;
+            }, 600);
+        } else {
+            // 模拟加载过程
+            setTimeout(() => {
+                loadingOverlay.classList.remove('active');
+                alert('此功能正在开发中，敬请期待！');
+            }, 200);
+        }
+    }
+
+    // 创建更多浮动元素以增强视觉效果
+    document.addEventListener('DOMContentLoaded', function () {
+        const decoration = document.querySelector('.background-decoration');
+        for (let i = 0; i < 5; i++) {
+            const element = document.createElement('div');
+            element.className = 'floating-element';
+            element.style.width = Math.random() * 60 + 20 + 'px';
+            element.style.height = element.style.width;
+            element.style.top = Math.random() * 100 + '%';
+            element.style.left = Math.random() * 100 + '%';
+            element.style.animationDelay = Math.random() * 5 + 's';
+            element.style.opacity = Math.random() * 0.1 + 0.05;
+            decoration.appendChild(element);
+        }
+    });
+</script>
+</body>
+</html>

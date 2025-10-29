@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>修仙游戏地图编辑器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            position: relative;
+        }
+
+        /* 背景装饰元素 */
+        .background-decoration {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .floating-element {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg);
+            }
+            50% {
+                transform: translateY(-20px) rotate(180deg);
+            }
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            padding: 0;
+        }
+
+        .editor-panel {
+            width: 30%;
+            min-width: 350px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            color: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .editor-content {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .map-container {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+            color: white;
+        }
+
+        h1, h2 {
+            color: #fff;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            transition: all 0.3s ease;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+
+        input::placeholder, textarea::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(231, 76, 60, 0.3);
+            border-color: rgba(231, 76, 60, 0.5);
+        }
+
+        .btn-danger:hover {
+            background: rgba(231, 76, 60, 0.5);
+        }
+
+        .btn-success {
+            background: rgba(46, 204, 113, 0.3);
+            border-color: rgba(46, 204, 113, 0.5);
+        }
+
+        .btn-success:hover {
+            background: rgba(46, 204, 113, 0.5);
+        }
+
+        .map-node {
+            position: absolute;
+            min-width: 150px;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            cursor: move;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .map-node:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .safe-area {
+            background: rgba(212, 237, 218, 0.3);
+            border: 1px solid rgba(195, 230, 203, 0.5);
+        }
+
+        .danger-area {
+            background: rgba(248, 215, 218, 0.3);
+            border: 1px solid rgba(245, 198, 203, 0.5);
+        }
+
+        .node-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 16px;
+            color: white;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .node-desc {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 5px;
+        }
+
+        .node-npcs {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .connection {
+            position: absolute;
+            height: 3px;
+            background-color: rgba(255, 255, 255, 0.5);
+            transform-origin: 0 0;
+            z-index: 5;
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+        }
+
+        .connection-arrow {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 12px solid rgba(255, 255, 255, 0.7);
+        }
+
+        .npc-list {
+            margin-top: 10px;
+        }
+
+        .npc-item {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .npc-item input {
+            margin: 5px 0;
+        }
+
+        .tools {
+            margin-top: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tools button {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .mode-indicator {
+            padding: 8px 15px;
+            background: rgba(241, 196, 15, 0.3);
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 15px;
+            text-align: center;
+            border: 1px solid rgba(241, 196, 15, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .json-output {
+            background: rgba(44, 62, 80, 0.4);
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            flex: 1;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-height: 150px;
+        }
+
+        /* 返回首页按钮 */
+        .back-to-home {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+            color: white;
+            font-size: 20px;
+            text-decoration: none;
+        }
+
+        .back-to-home:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-3px);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .editor-panel {
+                width: 100%;
+                height: 40%;
+                min-width: auto;
+            }
+
+            .tools {
+                flex-direction: column;
+            }
+
+            .tools button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<!-- 背景装饰元素 -->
+<div class="background-decoration">
+    <div class="floating-element" style="width: 100px; height: 100px; top: 10%; left: 10%;"></div>
+    <div class="floating-element" style="width: 150px; height: 150px; bottom: 15%; right: 10%;"></div>
+    <div class="floating-element" style="width: 80px; height: 80px; top: 40%; right: 20%;"></div>
+</div>
+
+<!-- 返回首页按钮 -->
+<a href="index.html" class="back-to-home" title="返回首页">🏠</a>
+
+<div class="container">
+    <div class="editor-panel">
+        <h1>🗺️ 地图编辑器</h1>
+
+        <div class="mode-indicator" id="modeIndicator">当前模式: 查看模式</div>
+
+        <div class="editor-content">
+            <div class="form-group">
+                <label for="areaName">区域名称:</label>
+                <input type="text" id="areaName" placeholder="输入区域名称">
+            </div>
+
+            <div class="form-group">
+                <label for="areaDesc">区域描述:</label>
+                <textarea id="areaDesc" placeholder="输入区域描述"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="areaSafety">安全区域:</label>
+                <select id="areaSafety">
+                    <option value="true">是</option>
+                    <option value="false">否</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>NPC列表:</label>
+                <div id="npcList" class="npc-list">
+                    <!-- NPC项将动态添加到这里 -->
+                </div>
+                <button id="addNpcBtn" class="btn-success">添加NPC</button>
+            </div>
+
+            <div class="tools">
+                <button id="addAreaBtn" class="btn-success">添加区域</button>
+                <button id="updateAreaBtn">更新区域</button>
+                <button id="deleteAreaBtn" class="btn-danger">删除区域</button>
+                <button id="connectModeBtn">连接模式</button>
+            </div>
+
+            <div class="form-group">
+                <label>相邻区域:</label>
+                <div id="adjacentAreas">
+                    <!-- 相邻区域将动态显示在这里 -->
+                </div>
+            </div>
+
+            <h2>地图JSON配置</h2>
+            <div id="jsonOutput" class="json-output"></div>
+
+            <div class="tools">
+                <button id="exportBtn">导出配置</button>
+                <button id="importBtn">导入配置</button>
+                <input type="file" id="importFile" style="display: none;" accept=".json">
+            </div>
+        </div>
+    </div>
+
+    <div class="map-container" id="mapContainer">
+        <!-- 地图节点将动态添加到这里 -->
+    </div>
+</div>
+
+<script>
+    // 初始地图数据
+    let mapData = {
+        "青云镇": {
+            "描述": "一个宁静的小镇，是修仙者初入仙途的第一站。",
+            "相邻区域": ["青云山脉", "翠竹林"],
+            "安全区域": true,
+            "位置": {"x": 100, "y": 300},
+            "NPC": [
+                {"名称": "镇长王大锤", "类型": "任务发布者"},
+                {"名称": "药店老板李大夫", "类型": "商人"}
+            ]
+        },
+        "青云山脉": {
+            "描述": "青云镇周边的山脉，灵气浓郁，适合初学者修炼。",
+            "相邻区域": ["青云镇", "翠竹林", "黑风寨"],
+            "安全区域": false,
+            "位置": {"x": 300, "y": 200},
+            "NPC": [
+                {"名称": "采药人小二", "类型": "材料商人"}
+            ]
+        },
+        "翠竹林": {
+            "描述": "一片翠绿的竹林，环境清幽，是修炼心境的好地方。",
+            "相邻区域": ["青云镇", "青云山脉", "无名洞府"],
+            "安全区域": true,
+            "位置": {"x": 200, "y": 450},
+            "NPC": [
+                {"名称": "竹翁", "类型": "隐士"}
+            ]
+        },
+        "黑风寨": {
+            "描述": "山贼盘踞之地，危险重重，但机缘也多。",
+            "相邻区域": ["青云山脉", "荒古战场"],
+            "安全区域": false,
+            "位置": {"x": 500, "y": 150},
+            "NPC": [
+                {"名称": "黑风寨主", "类型": "敌对Boss"}
+            ]
+        },
+        "无名洞府": {
+            "描述": "一处古老的洞府，据说藏有前人留下的宝物。",
+            "相邻区域": ["翠竹林", "荒古战场"],
+            "安全区域": false,
+            "位置": {"x": 400, "y": 400},
+            "NPC": [
+                {"名称": "洞府守护者", "类型": "精英怪物"}
+            ]
+        },
+        "荒古战场": {
+            "描述": "远古时期仙魔大战的战场，残留着强大的气息。",
+            "相邻区域": ["黑风寨", "无名洞府", "天剑宗"],
+            "安全区域": false,
+            "位置": {"x": 700, "y": 300},
+            "NPC": [
+                {"名称": "战场游魂", "类型": "普通怪物"}
+            ]
+        },
+        "天剑宗": {
+            "描述": "正道三大宗门之一，剑修圣地。",
+            "相邻区域": ["荒古战场", "血刀门"],
+            "安全区域": true,
+            "位置": {"x": 900, "y": 200},
+            "NPC": [
+                {"名称": "掌门天剑老人", "类型": "宗门掌门"},
+                {"名称": "剑侍", "类型": "宗门守卫"}
+            ]
+        },
+        "血刀门": {
+            "描述": "魔道三大宗门之一，以刀法和血祭闻名。",
+            "相邻区域": ["天剑宗", "万毒门"],
+            "安全区域": true,
+            "位置": {"x": 1100, "y": 350},
+            "NPC": [
+                {"名称": "门主血无涯", "类型": "宗门掌门"}
+            ]
+        },
+        "万毒门": {
+            "描述": "邪道宗门，专精毒物和蛊术。",
+            "相邻区域": ["血刀门", "昆仑仙境"],
+            "安全区域": true,
+            "位置": {"x": 900, "y": 500},
+            "NPC": [
+                {"名称": "圣女毒仙子", "类型": "宗门圣女"}
+            ]
+        },
+        "昆仑仙境": {
+            "描述": "传说中的仙界入口，只有达到一定境界才能进入。",
+            "相邻区域": ["万毒门"],
+            "安全区域": true,
+            "位置": {"x": 1100, "y": 600},
+            "NPC": [
+                {"名称": "仙童", "类型": "仙人"}
+            ]
+        }
+    };
+
+    // 当前选中的区域
+    let selectedArea = null;
+    // 连接模式状态
+    let connectMode = false;
+    // 连接起点
+    let connectStart = null;
+
+    // DOM元素
+    const mapContainer = document.getElementById('mapContainer');
+    const areaNameInput = document.getElementById('areaName');
+    const areaDescInput = document.getElementById('areaDesc');
+    const areaSafetySelect = document.getElementById('areaSafety');
+    const npcListDiv = document.getElementById('npcList');
+    const adjacentAreasDiv = document.getElementById('adjacentAreas');
+    const jsonOutputDiv = document.getElementById('jsonOutput');
+    const modeIndicator = document.getElementById('modeIndicator');
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function () {
+        renderMap();
+        updateJsonOutput();
+
+        // 事件监听
+        document.getElementById('addAreaBtn').addEventListener('click', addNewArea);
+        document.getElementById('updateAreaBtn').addEventListener('click', updateArea);
+        document.getElementById('deleteAreaBtn').addEventListener('click', deleteArea);
+        document.getElementById('connectModeBtn').addEventListener('click', toggleConnectMode);
+        document.getElementById('addNpcBtn').addEventListener('click', addNpc);
+        document.getElementById('exportBtn').addEventListener('click', exportConfig);
+        document.getElementById('importBtn').addEventListener('click', triggerImport);
+        document.getElementById('importFile').addEventListener('change', importConfig);
+
+        // 创建更多浮动元素
+        createFloatingElements();
+    });
+
+    // 创建更多浮动元素
+    function createFloatingElements() {
+        const decoration = document.querySelector('.background-decoration');
+        for (let i = 0; i < 5; i++) {
+            const element = document.createElement('div');
+            element.className = 'floating-element';
+            element.style.width = Math.random() * 60 + 20 + 'px';
+            element.style.height = element.style.width;
+            element.style.top = Math.random() * 100 + '%';
+            element.style.left = Math.random() * 100 + '%';
+            element.style.animationDelay = Math.random() * 5 + 's';
+            element.style.opacity = Math.random() * 0.1 + 0.05;
+            decoration.appendChild(element);
+        }
+    }
+
+    // 渲染地图
+    function renderMap() {
+        // 清空地图容器
+        mapContainer.innerHTML = '';
+
+        // 先绘制连接线
+        for (const areaName in mapData) {
+            const area = mapData[areaName];
+            if (area.相邻区域) {
+                area.相邻区域.forEach(adjacent => {
+                    if (mapData[adjacent] && mapData[adjacent].位置) {
+                        drawConnection(area.位置, mapData[adjacent].位置, areaName, adjacent);
+                    }
+                });
+            }
+        }
+
+        // 再绘制区域节点
+        for (const areaName in mapData) {
+            const area = mapData[areaName];
+            createAreaNode(areaName, area);
+        }
+    }
+
+    // 创建区域节点
+    function createAreaNode(name, data) {
+        const node = document.createElement('div');
+        node.className = `map-node ${data.安全区域 ? 'safe-area' : 'danger-area'}`;
+        node.style.left = `${data.位置.x}px`;
+        node.style.top = `${data.位置.y}px`;
+        node.setAttribute('data-name', name);
+        node.setAttribute('draggable', 'true');
+
+        node.innerHTML = `
+                <div class="node-name">${name}</div>
+                <div class="node-desc">${data.描述}</div>
+                <div class="node-npcs">${data.NPC.length}个NPC</div>
+            `;
+
+        // 添加事件监听
+        node.addEventListener('click', function (e) {
+            e.stopPropagation();
+            selectArea(name);
+
+            // 如果在连接模式，处理连接
+            if (connectMode) {
+                if (connectStart === null) {
+                    connectStart = name;
+                    modeIndicator.textContent = `当前模式: 连接模式 - 已选择起点: ${name}`;
+                } else {
+                    if (connectStart !== name) {
+                        createConnection(connectStart, name);
+                    }
+                    connectStart = null;
+                    modeIndicator.textContent = '当前模式: 连接模式 - 请选择起点';
+                }
+            }
+        });
+
+        // 添加拖拽功能
+        makeDraggable(node, name);
+
+        mapContainer.appendChild(node);
+    }
+
+    // 使节点可拖拽
+    function makeDraggable(element, areaName) {
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        element.addEventListener('mousedown', function (e) {
+            isDragging = true;
+            offsetX = e.clientX - element.getBoundingClientRect().left;
+            offsetY = e.clientY - element.getBoundingClientRect().top;
+            element.style.zIndex = "100";
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function (e) {
+            if (!isDragging) return;
+
+            const mapRect = mapContainer.getBoundingClientRect();
+            const elementRect = element.getBoundingClientRect();
+
+            let x = e.clientX - mapRect.left - offsetX;
+            let y = e.clientY - mapRect.top - offsetY;
+
+            // 限制拖拽范围
+            x = Math.max(0, Math.min(x, mapRect.width - elementRect.width));
+            y = Math.max(0, Math.min(y, mapRect.height - elementRect.height));
+
+            element.style.left = x + 'px';
+            element.style.top = y + 'px';
+
+            // 更新数据
+            mapData[areaName].位置.x = x;
+            mapData[areaName].位置.y = y;
+
+            // 更新连接线
+            updateConnections();
+        });
+
+        document.addEventListener('mouseup', function () {
+            if (isDragging) {
+                isDragging = false;
+                element.style.zIndex = "10";
+                updateJsonOutput();
+            }
+        });
+    }
+
+    // 绘制连接线
+    function drawConnection(startPos, endPos, startName, endName) {
+        // 计算连线长度和角度
+        const dx = endPos.x - startPos.x;
+        const dy = endPos.y - startPos.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+        // 创建连线
+        const connection = document.createElement('div');
+        connection.className = 'connection';
+        connection.style.width = `${length}px`;
+        connection.style.left = `${startPos.x}px`;
+        connection.style.top = `${startPos.y}px`;
+        connection.style.transform = `rotate(${angle}deg)`;
+
+        // 创建箭头
+        const arrow = document.createElement('div');
+        arrow.className = 'connection-arrow';
+        arrow.style.left = `${length - 5}px`;
+        arrow.style.top = `-4px`;
+        arrow.style.transform = `rotate(${angle}deg)`;
+
+        connection.appendChild(arrow);
+        connection.setAttribute('data-connection', `${startName}-${endName}`);
+        mapContainer.appendChild(connection);
+    }
+
+    // 更新所有连接线
+    function updateConnections() {
+        // 移除所有现有连接线
+        document.querySelectorAll('.connection').forEach(conn => {
+            conn.remove();
+        });
+
+        // 重新绘制所有连接线
+        for (const areaName in mapData) {
+            const area = mapData[areaName];
+            if (area.相邻区域) {
+                area.相邻区域.forEach(adjacent => {
+                    if (mapData[adjacent] && mapData[adjacent].位置) {
+                        drawConnection(area.位置, mapData[adjacent].位置, areaName, adjacent);
+                    }
+                });
+            }
+        }
+    }
+
+    // 选择区域
+    function selectArea(name) {
+        selectedArea = name;
+        const area = mapData[name];
+
+        // 更新表单
+        areaNameInput.value = name;
+        areaDescInput.value = area.描述;
+        areaSafetySelect.value = area.安全区域;
+
+        // 更新NPC列表
+        updateNpcList(area.NPC);
+
+        // 更新相邻区域显示
+        updateAdjacentAreas(name);
+
+        // 高亮选中的节点
+        document.querySelectorAll('.map-node').forEach(node => {
+            node.style.boxShadow = node.getAttribute('data-name') === name ?
+                '0 0 0 3px #3498db, 0 0 15px rgba(52, 152, 219, 0.7)' : '0 4px 15px rgba(0, 0, 0, 0.2)';
+        });
+    }
+
+    // 更新NPC列表显示
+    function updateNpcList(npcs) {
+        npcListDiv.innerHTML = '';
+
+        npcs.forEach((npc, index) => {
+            const npcItem = document.createElement('div');
+            npcItem.className = 'npc-item';
+            npcItem.innerHTML = `
+                    <div>名称: <input type="text" value="${npc.名称}" data-index="${index}" class="npc-name"></div>
+                    <div>类型: <input type="text" value="${npc.类型}" data-index="${index}" class="npc-type"></div>
+                    <button class="btn-danger delete-npc" data-index="${index}">删除</button>
+                `;
+            npcListDiv.appendChild(npcItem);
+        });
+
+        // 添加删除NPC的事件监听
+        document.querySelectorAll('.delete-npc').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const index = parseInt(this.getAttribute('data-index'));
+                deleteNpc(index);
+            });
+        });
+
+        // 添加NPC字段更改的事件监听
+        document.querySelectorAll('.npc-name, .npc-type').forEach(input => {
+            input.addEventListener('change', function () {
+                const index = parseInt(this.getAttribute('data-index'));
+                updateNpcField(index, this.className, this.value);
+            });
+        });
+    }
+
+    // 更新相邻区域显示
+    function updateAdjacentAreas(areaName) {
+        adjacentAreasDiv.innerHTML = '';
+        const area = mapData[areaName];
+
+        area.相邻区域.forEach(adjacent => {
+            const adjItem = document.createElement('div');
+            adjItem.className = 'npc-item';
+            adjItem.innerHTML = `
+                    <span>${adjacent}</span>
+                    <button class="btn-danger delete-adjacent" data-adjacent="${adjacent}">删除连接</button>
+                `;
+            adjacentAreasDiv.appendChild(adjItem);
+        });
+
+        // 添加删除相邻区域的事件监听
+        document.querySelectorAll('.delete-adjacent').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const adjacent = this.getAttribute('data-adjacent');
+                deleteConnection(areaName, adjacent);
+            });
+        });
+    }
+
+    // 添加新区域
+    function addNewArea() {
+        const name = areaNameInput.value.trim();
+        if (!name) {
+            alert('请输入区域名称');
+            return;
+        }
+
+        if (mapData[name]) {
+            alert('区域名称已存在');
+            return;
+        }
+
+        // 创建新区域
+        mapData[name] = {
+            "描述": areaDescInput.value,
+            "相邻区域": [],
+            "安全区域": areaSafetySelect.value === "true",
+            "位置": {
+                "x": Math.random() * (mapContainer.offsetWidth - 200) + 100,
+                "y": Math.random() * (mapContainer.offsetHeight - 200) + 100
+            },
+            "NPC": []
+        };
+
+        // 重新渲染地图
+        renderMap();
+        updateJsonOutput();
+
+        // 选择新区域
+        selectArea(name);
+    }
+
+    // 更新区域
+    function updateArea() {
+        if (!selectedArea) {
+            alert('请先选择一个区域');
+            return;
+        }
+
+        const name = areaNameInput.value.trim();
+        if (!name) {
+            alert('区域名称不能为空');
+            return;
+        }
+
+        // 如果名称改变了，需要更新数据结构
+        if (name !== selectedArea) {
+            // 检查新名称是否已存在
+            if (mapData[name]) {
+                alert('区域名称已存在');
+                return;
+            }
+
+            // 更新所有相邻区域中的引用
+            for (const area in mapData) {
+                const index = mapData[area].相邻区域.indexOf(selectedArea);
+                if (index !== -1) {
+                    mapData[area].相邻区域[index] = name;
+                }
+            }
+
+            // 移动数据到新键
+            mapData[name] = mapData[selectedArea];
+            delete mapData[selectedArea];
+
+            selectedArea = name;
+        }
+
+        // 更新区域属性
+        mapData[name].描述 = areaDescInput.value;
+        mapData[name].安全区域 = areaSafetySelect.value === "true";
+
+        // 重新渲染地图
+        renderMap();
+        updateJsonOutput();
+    }
+
+    // 删除区域
+    function deleteArea() {
+        if (!selectedArea) {
+            alert('请先选择一个区域');
+            return;
+        }
+
+        if (!confirm(`确定要删除区域"${selectedArea}"吗？`)) {
+            return;
+        }
+
+        // 从所有相邻区域中移除引用
+        for (const area in mapData) {
+            const index = mapData[area].相邻区域.indexOf(selectedArea);
+            if (index !== -1) {
+                mapData[area].相邻区域.splice(index, 1);
+            }
+        }
+
+        // 删除区域
+        delete mapData[selectedArea];
+
+        // 重置表单
+        areaNameInput.value = '';
+        areaDescInput.value = '';
+        areaSafetySelect.value = 'true';
+        npcListDiv.innerHTML = '';
+        adjacentAreasDiv.innerHTML = '';
+        selectedArea = null;
+
+        // 重新渲染地图
+        renderMap();
+        updateJsonOutput();
+    }
+
+    // 切换连接模式
+    function toggleConnectMode() {
+        connectMode = !connectMode;
+        connectStart = null;
+
+        if (connectMode) {
+            modeIndicator.textContent = '当前模式: 连接模式 - 请选择起点';
+            modeIndicator.style.background = 'rgba(241, 196, 15, 0.3)';
+        } else {
+            modeIndicator.textContent = '当前模式: 查看模式';
+            modeIndicator.style.background = 'rgba(46, 204, 113, 0.3)';
+        }
+    }
+
+    // 创建连接
+    function createConnection(start, end) {
+        if (!mapData[start].相邻区域.includes(end)) {
+            mapData[start].相邻区域.push(end);
+        }
+
+        if (!mapData[end].相邻区域.includes(start)) {
+            mapData[end].相邻区域.push(start);
+        }
+
+        // 重新渲染地图
+        renderMap();
+        updateJsonOutput();
+
+        // 更新相邻区域显示
+        if (selectedArea === start || selectedArea === end) {
+            updateAdjacentAreas(selectedArea);
+        }
+    }
+
+    // 删除连接
+    function deleteConnection(area1, area2) {
+        const index1 = mapData[area1].相邻区域.indexOf(area2);
+        if (index1 !== -1) {
+            mapData[area1].相邻区域.splice(index1, 1);
+        }
+
+        const index2 = mapData[area2].相邻区域.indexOf(area1);
+        if (index2 !== -1) {
+            mapData[area2].相邻区域.splice(index2, 1);
+        }
+
+        // 重新渲染地图
+        renderMap();
+        updateJsonOutput();
+
+        // 更新相邻区域显示
+        updateAdjacentAreas(selectedArea);
+    }
+
+    // 添加NPC
+    function addNpc() {
+        if (!selectedArea) {
+            alert('请先选择一个区域');
+            return;
+        }
+
+        mapData[selectedArea].NPC.push({
+            "名称": "新NPC",
+            "类型": "NPC类型"
+        });
+
+        updateNpcList(mapData[selectedArea].NPC);
+        updateJsonOutput();
+    }
+
+    // 删除NPC
+    function deleteNpc(index) {
+        if (!selectedArea) return;
+
+        mapData[selectedArea].NPC.splice(index, 1);
+        updateNpcList(mapData[selectedArea].NPC);
+        updateJsonOutput();
+    }
+
+    // 更新NPC字段
+    function updateNpcField(index, field, value) {
+        if (!selectedArea) return;
+
+        const fieldName = field === 'npc-name' ? '名称' : '类型';
+        mapData[selectedArea].NPC[index][fieldName] = value;
+        updateJsonOutput();
+    }
+
+    // 更新JSON输出
+    function updateJsonOutput() {
+        // 创建不含位置信息的副本
+        const outputData = {};
+        for (const area in mapData) {
+            outputData[area] = {...mapData[area]};
+            delete outputData[area].位置;
+        }
+
+        jsonOutputDiv.textContent = JSON.stringify({"地图": outputData}, null, 2);
+    }
+
+    // 导出配置
+    function exportConfig() {
+        const dataStr = JSON.stringify({"地图": mapData}, null, 2);
+        const dataBlob = new Blob([dataStr], {type: 'application/json'});
+
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(dataBlob);
+        link.download = 'game_map.json';
+        link.click();
+    }
+
+    // 触发导入
+    function triggerImport() {
+        document.getElementById('importFile').click();
+    }
+
+    // 导入配置
+    function importConfig(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (importedData.地图) {
+                    // 为导入的数据添加位置信息（如果缺失）
+                    for (const area in importedData.地图) {
+                        if (!importedData.地图[area].位置) {
+                            importedData.地图[area].位置 = {
+                                x: Math.random() * (mapContainer.offsetWidth - 200) + 100,
+                                y: Math.random() * (mapContainer.offsetHeight - 200) + 100
+                            };
+                        }
+                    }
+
+                    mapData = importedData.地图;
+                    renderMap();
+                    updateJsonOutput();
+
+                    // 重置选择
+                    selectedArea = null;
+                    areaNameInput.value = '';
+                    areaDescInput.value = '';
+                    areaSafetySelect.value = 'true';
+                    npcListDiv.innerHTML = '';
+                    adjacentAreasDiv.innerHTML = '';
+
+                    alert('配置导入成功！');
+                } else {
+                    alert('无效的地图配置格式');
+                }
+            } catch (error) {
+                alert('导入失败：' + error.message);
+            }
+        };
+        reader.readAsText(file);
+
+        // 重置文件输入
+        event.target.value = '';
+    }
+</script>
+</body>
+</html>

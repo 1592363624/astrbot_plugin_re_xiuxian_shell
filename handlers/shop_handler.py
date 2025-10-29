@@ -1,0 +1,190 @@
+# handlers/shop_handler.py
+import random
+from datetime import datetime
+from typing import Optional, Tuple
+
+from astrbot.api import AstrBotConfig
+from astrbot.api.event import AstrMessageEvent
+# 从专门的指令配置文件导入
+from data.plugins.astrbot_plugin_re_xiuxian_shell.commands import 购买, 使用
+from .utils import player_required
+from ..config_manager import ConfigManager
+from ..data import DataBase
+from ..models import Player, PlayerEffect, Item
+
+__all__ = ["ShopHandler"]
+
+
+def calculate_item_effect(item_info: Optional[Item], quantity: int) -> Tuple[Optional[PlayerEffect], str]:
+    if not item_info or not (effect_config := item_info.effect):
+        return None, f"【{item_info.name if item_info else '未知物品'}】似乎只是凡物，无法使用。"
+
+    effect = PlayerEffect()
+    messages = []
+
+    effect_type = effect_config.get("type")
+    value = effect_config.get("value", 0) * quantity
+
+    if effect_type == "add_experience":
+        effect.experience = value
+        messages.append(f"修为增加了 {value} 点")
+    elif effect_type == "add_gold":
+        effect.gold = value
+        messages.append(f"灵石增加了 {value} 点")
+    elif effect_type == "add_hp":
+        effect.hp = value
+        messages.append(f"恢复了 {value} 点生命")
+    else:
+        return None, f"你研究了半天，也没能参透【{item_info.name}】的用法。"
+
+    full_message = f"你使用了 {quantity} 个【{item_info.name}】，" + "，".join(messages) + "！"
+    return effect, full_message
+
+
+class ShopHandler:
+    # 坊市相关指令处理器
+
+    def __init__(self, db: DataBase, config_manager: ConfigManager, config: AstrBotConfig):
+        self.db = db
+        self.config_manager = config_manager
+        self.config = config
+
+    async def handle_shop(self, event: AstrMessageEvent):
+        reply_msg = f"--- 仙途坊市 ({datetime.now().strftime('%Y-%m-%d')}) ---\n"
+
+        # 获取所有可售卖的商品
+        all_sellable_items = [item for item in self.config_manager.item_data.values() if item.price > 0]
+
+        # 从配置中获取每日商品数量
+        item_count = self.config["VALUES"].get("SHOP_DAILY_ITEM_COUNT", 8)
+
+        if not all_sellable_items:
+            reply_msg += "今日坊市暂无商品。\n"
+        else:
+            # 使用当天日期作为随机种子，确保每日商品固定
+            today_seed = int(datetime.now().strftime('%Y%m%d'))
+            rng = random.Random(today_seed)
+
+            # 如果商品总数小于等于设定数量，则全部显示
+            if len(all_sellable_items) <= item_count:
+                daily_items = all_sellable_items
+            else:
+                daily_items = rng.sample(all_sellable_items, item_count)
+
+            sorted_items = sorted(daily_items, key=lambda item: item.price)
+
+            for info in sorted_items:
+                reply_msg += f"【{info.name}】售价：{info.price} 灵石\n"
+
+        reply_msg += "------------------\n"
+        reply_msg += f"使用「{购买} <物品名> [数量]」进行购买。"
+        yield event.plain_result(reply_msg)
+
+    @player_required
+    async def handle_backpack(self, player: Player, event: AstrMessageEvent):
+        inventory = await self.db.get_inventory_by_user_id(player.user_id, self.config_manager)
+        if not inventory:
+            yield event.plain_result("道友的背包空空如也。")
+            return
+
+        reply_msg = f"--- {event.get_sender_name()} 的背包 ---\n"
+        for item in inventory:
+            reply_msg += f"【{item['name']}】x{item['quantity']} - {item['description']}\n"
+        reply_msg += "--------------------------"
+        yield event.plain_result(reply_msg)
+
+    @player_required
+    async def handle_buy(self, player: Player, event: AstrMessageEvent, item_name: str, quantity: int):
+        if not item_name or quantity <= 0:
+            yield event.plain_result(f"指令格式错误。正确用法: `{购买} <物品名> [数量]`。")
+            return
+
+        item_to_buy = self.config_manager.get_item_by_name(item_name)
+        if not item_to_buy or item_to_buy[1].price <= 0:
+            yield event.plain_result(f"道友，小店中并无「{item_name}」这件商品。")
+            return
+
+        item_id_to_add, target_item_info = item_to_buy
+        total_cost = target_item_info.price * quantity
+
+        success, reason = await self.db.transactional_buy_item(player.user_id, item_id_to_add, quantity, total_cost)
+
+        if success:
+            updated_player = await self.db.get_player_by_id(player.user_id)
+            if updated_player:
+                yield event.plain_result(
+                    f"购买成功！花费{total_cost}灵石，购得「{item_name}」x{quantity}。剩余灵石 {updated_player.gold}。")
+            else:
+                yield event.plain_result(f"购买成功！花费{total_cost}灵石，购得「{item_name}」x{quantity}。")
+        else:
+            if reason == "ERROR_INSUFFICIENT_FUNDS":
+                yield event.plain_result(
+                    f"灵石不足！购买 {quantity}个「{item_name}」需{total_cost}灵石，你只有{player.gold}。")
+            else:
+                yield event.plain_result("购买失败，坊市交易繁忙，请稍后再试。")
+
+    @player_required
+    async def handle_use(self, player: Player, event: AstrMessageEvent, item_name: str, quantity: int = 1):
+        if not item_name or quantity <= 0:
+            yield event.plain_result(f"指令格式错误。正确用法: `{使用} <物品名> [数量]`。")
+            return
+
+        item_to_use = self.config_manager.get_item_by_name(item_name)
+        if not item_to_use:
+            yield event.plain_result(f"背包中似乎没有名为「{item_name}」的物品。")
+            return
+
+        target_item_id, target_item_info = item_to_use
+
+        # 检查背包数量
+        inventory_item = await self.db.get_item_from_inventory(player.user_id, target_item_id)
+        if not inventory_item or inventory_item['quantity'] < quantity:
+            yield event.plain_result(f"使用失败！你的「{item_name}」数量不足 {quantity} 个。")
+            return
+
+        # 根据物品类型执行不同功能
+        if target_item_info.type == "法器":
+            # 执行装备逻辑
+            if quantity > 1:
+                yield event.plain_result(f"每次只能装备一件法器。")
+                return
+
+            p_clone = player.clone()
+            unequipped_item_id = None
+            slot_name = target_item_info.subtype
+
+            if slot_name == "武器":
+                if p_clone.equipped_weapon: unequipped_item_id = p_clone.equipped_weapon
+                p_clone.equipped_weapon = target_item_id
+            elif slot_name == "防具":
+                if p_clone.equipped_armor: unequipped_item_id = p_clone.equipped_armor
+                p_clone.equipped_armor = target_item_id
+            elif slot_name == "饰品":
+                if p_clone.equipped_accessory: unequipped_item_id = p_clone.equipped_accessory
+                p_clone.equipped_accessory = target_item_id
+            else:
+                yield event.plain_result(f"「{item_name}」似乎不是一件可穿戴的法器。")
+                return
+
+            # 更新数据库
+            await self.db.remove_item_from_inventory(player.user_id, target_item_id, 1)
+            if unequipped_item_id:
+                await self.db.add_items_to_inventory_in_transaction(player.user_id, {unequipped_item_id: 1})
+
+            await self.db.update_player(p_clone)
+            yield event.plain_result(f"已成功装备【{item_name}】。")
+
+        else:
+            # 消耗品
+            effect, msg = calculate_item_effect(target_item_info, quantity)
+            if not effect:
+                yield event.plain_result(msg)
+                return
+
+            success = await self.db.transactional_apply_item_effect(player.user_id, target_item_id, quantity, effect)
+
+            if success:
+                yield event.plain_result(msg)
+            else:
+                # 理论上这里的数量不足检查不会触发，但作为保险
+                yield event.plain_result(f"使用失败！可能发生了未知错误。")
