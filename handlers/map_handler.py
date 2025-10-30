@@ -4,6 +4,8 @@ from .utils import player_required
 from ..config_manager import ConfigManager
 from ..data import DataBase
 from ..models import Player
+import time
+import random
 
 __all__ = ["MapHandler"]
 
@@ -46,6 +48,23 @@ class MapHandler:
         if "NPC" in map_info and map_info["NPC"]:
             npc_names = [npc["名称"] for npc in map_info["NPC"]]
             reply_lines.append("🧙地图NPC：" + "、".join(npc_names))
+
+        # 显示资源点
+        resources = self.config_manager.get_resources_by_map(current_map_name)
+        if resources:
+            reply_lines.append("🪨资源点：")
+            for resource_name, resource_info in resources.items():
+                # 获取资源当前状态
+                resource_status = await self.db.get_map_resource(current_map_name, resource_name)
+                if resource_status:
+                    current_quantity = resource_status['current_quantity']
+                    max_quantity = resource_info['最大数量']
+                    reply_lines.append(f"  {resource_name}：{resource_info['描述']} ({current_quantity}/{max_quantity})")
+                else:
+                    # 初始化资源点
+                    max_quantity = resource_info['最大数量']
+                    await self.db.update_map_resource(current_map_name, resource_name, max_quantity, time.time())
+                    reply_lines.append(f"  {resource_name}：{resource_info['描述']} ({max_quantity}/{max_quantity})")
 
         # 显示其他玩家
         if player_names:
@@ -109,4 +128,161 @@ class MapHandler:
             reply_lines.append(f"{prefix}{safe_marker} {map_name} - {map_info['描述']}")
 
         reply_lines.append("--------------------------")
+        yield event.plain_result("\n".join(reply_lines))
+
+    @player_required
+    async def handle_collect_resource(self, player: Player, event: AstrMessageEvent, resource_name: str = ""):
+        """采集资源"""
+        if not resource_name:
+            yield event.plain_result("指令格式错误！请使用「采集 <资源名>」。")
+            return
+
+        current_map_name = player.current_map
+        resource_config = self.config_manager.get_resource_by_name(current_map_name, resource_name)
+
+        if not resource_config:
+            yield event.plain_result(f"在「{current_map_name}」找不到名为「{resource_name}」的资源点。")
+            return
+
+        # 检查是否已经有正在进行的采集任务
+        existing_task = await self.db.get_resource_collection_task(player.user_id, current_map_name, resource_name)
+        if existing_task:
+            remaining_time = existing_task['completion_time'] - time.time()
+            if remaining_time > 0:
+                yield event.plain_result(f"你已经在采集{resource_name}了，还需要{int(remaining_time)}秒完成。")
+                return
+            else:
+                # 任务已完成，但未领取
+                yield event.plain_result(f"你对{resource_name}的采集已经完成，请先领取资源。")
+                return
+
+        # 检查资源点是否有足够资源
+        resource_status = await self.db.get_map_resource(current_map_name, resource_name)
+        current_time = time.time()
+
+        # 如果资源点不存在，初始化它
+        if not resource_status:
+            await self.db.update_map_resource(current_map_name, resource_name,
+                                              resource_config['最大数量'], current_time)
+            resource_status = {
+                'current_quantity': resource_config['最大数量'],
+                'last_refresh_time': current_time
+            }
+
+        # 检查是否需要刷新资源
+        time_since_refresh = current_time - resource_status['last_refresh_time']
+        if time_since_refresh >= resource_config['刷新时间']:
+            # 刷新资源
+            await self.db.update_map_resource(current_map_name, resource_name,
+                                              resource_config['最大数量'], current_time)
+            resource_status['current_quantity'] = resource_config['最大数量']
+
+        # 检查资源是否足够
+        if resource_status['current_quantity'] <= 0:
+            yield event.plain_result(f"{resource_name}已经枯竭，请等待刷新。")
+            return
+
+        # 创建采集任务
+        collection_time = resource_config['每次采集时间']
+        start_time = current_time
+        completion_time = start_time + collection_time
+
+        # 计算采集数量
+        quantity_range = resource_config['每次采集数量范围']
+        collected_quantity = random.randint(quantity_range[0], quantity_range[1])
+
+        # 限制采集数量不超过当前资源量
+        collected_quantity = min(collected_quantity, resource_status['current_quantity'])
+
+        # 添加采集任务
+        await self.db.add_resource_collection_task(
+            player.user_id, current_map_name, resource_name,
+            start_time, completion_time, collected_quantity
+        )
+
+        # 减少资源点的资源量
+        new_quantity = resource_status['current_quantity'] - collected_quantity
+        await self.db.update_map_resource(current_map_name, resource_name,
+                                          new_quantity, resource_status['last_refresh_time'])
+
+        yield event.plain_result(f"开始采集{resource_name}，需要{collection_time}秒，预计获得{collected_quantity}个。")
+
+    @player_required
+    async def handle_check_collection(self, player: Player, event: AstrMessageEvent):
+        """检查采集进度"""
+        tasks = await self.db.get_user_active_collection_tasks(player.user_id)
+
+        if not tasks:
+            yield event.plain_result("你当前没有进行任何采集任务。")
+            return
+
+        reply_lines = ["🔄 你的采集任务："]
+        current_time = time.time()
+
+        for task in tasks:
+            remaining_time = task['completion_time'] - current_time
+            if remaining_time <= 0:
+                reply_lines.append(f"✅ {task['resource_name']}：已完成，可以领取")
+            else:
+                reply_lines.append(f"⏳ {task['resource_name']}：剩余 {int(remaining_time)} 秒")
+
+        yield event.plain_result("\n".join(reply_lines))
+
+    @player_required
+    async def handle_claim_resource(self, player: Player, event: AstrMessageEvent):
+        """领取已完成的采集资源"""
+        completed_tasks = await self.db.get_completed_resource_collection_tasks(player.user_id)
+
+        if not completed_tasks:
+            # 检查是否有进行中的任务已经完成但未标记
+            active_tasks = await self.db.get_user_active_collection_tasks(player.user_id)
+            ready_to_claim = []
+            current_time = time.time()
+
+            for task in active_tasks:
+                if task['completion_time'] <= current_time:
+                    ready_to_claim.append(task)
+
+            if not ready_to_claim:
+                yield event.plain_result("你没有已完成的采集任务可以领取。")
+                return
+
+            completed_tasks = ready_to_claim
+
+        total_collected = {}
+        claimed_task_ids = []
+
+        for task in completed_tasks:
+            resource_type = self.config_manager.get_resource_by_name(
+                task['map_name'], task['resource_name'])['资源类型']
+
+            # 累计资源
+            if resource_type not in total_collected:
+                total_collected[resource_type] = 0
+            total_collected[resource_type] += task['quantity']
+
+            # 标记任务为已领取
+            if 'id' in task:  # 已经在数据库中的任务
+                success = await self.db.complete_resource_collection_task(task['id'])
+                if success:
+                    claimed_task_ids.append(task['id'])
+            else:  # 临时任务（还未存入数据库）
+                # 这种情况下我们直接添加到背包中
+                pass
+
+        # 给玩家添加资源（这里简化处理，实际应该添加到玩家的资源背包中）
+        reply_lines = ["🎉 采集完成，获得资源："]
+        for resource_type, quantity in total_collected.items():
+            reply_lines.append(f"  {resource_type}: {quantity}个")
+
+            # 如果是灵石，直接加到玩家的金币中
+            if resource_type == "灵石":
+                p_clone = player.clone()
+                p_clone.gold += quantity
+                await self.db.update_player(p_clone)
+
+        # 移除已领取的任务
+        for task_id in claimed_task_ids:
+            await self.db.remove_completed_resource_collection_task(task_id)
+
         yield event.plain_result("\n".join(reply_lines))

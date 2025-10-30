@@ -343,3 +343,103 @@ class DataBase:
                 return row[0]
 
         return "default_avatar"
+
+    async def get_map_resources(self, map_name: str) -> Dict[str, Dict[str, Any]]:
+        """获取指定地图的所有资源点当前状态"""
+        async with self.conn.execute(
+                "SELECT resource_name, current_quantity, last_refresh_time FROM map_resources WHERE map_name = ?",
+                (map_name,)) as cursor:
+            rows = await cursor.fetchall()
+            return {row['resource_name']: {
+                'current_quantity': row['current_quantity'],
+                'last_refresh_time': row['last_refresh_time']
+            } for row in rows}
+
+    async def get_map_resource(self, map_name: str, resource_name: str) -> Optional[Dict[str, Any]]:
+        """获取指定地图中特定资源点的当前状态"""
+        async with self.conn.execute(
+                "SELECT current_quantity, last_refresh_time FROM map_resources WHERE map_name = ? AND resource_name = ?",
+                (map_name, resource_name)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def update_map_resource(self, map_name: str, resource_name: str, current_quantity: int,
+                                  last_refresh_time: float):
+        """更新地图资源点状态"""
+        await self.conn.execute("""
+            INSERT OR REPLACE INTO map_resources 
+            (map_name, resource_name, current_quantity, last_refresh_time)
+            VALUES (?, ?, ?, ?)
+        """, (map_name, resource_name, current_quantity, last_refresh_time))
+        await self.conn.commit()
+
+    async def add_resource_collection_task(self, user_id: str, map_name: str, resource_name: str,
+                                           start_time: float, completion_time: float, quantity: int):
+        """添加资源采集任务"""
+        await self.conn.execute("""
+                                INSERT INTO resource_collection_queue
+                                (user_id, map_name, resource_name, start_time, completion_time, quantity)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                                """, (user_id, map_name, resource_name, start_time, completion_time, quantity))
+        await self.conn.commit()
+
+    async def get_user_active_collection_tasks(self, user_id: str) -> List[Dict[str, Any]]:
+        """获取用户正在进行的采集任务"""
+        async with self.conn.execute(
+                "SELECT * FROM resource_collection_queue WHERE user_id = ? AND collected = FALSE",
+                (user_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def get_resource_collection_task(self, user_id: str, map_name: str, resource_name: str) -> Optional[
+        Dict[str, Any]]:
+        """获取用户对特定资源的采集任务"""
+        async with self.conn.execute(
+                """SELECT *
+                   FROM resource_collection_queue
+                   WHERE user_id = ?
+                     AND map_name = ?
+                     AND resource_name = ?
+                     AND collected = FALSE""",
+                (user_id, map_name, resource_name)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def complete_resource_collection_task(self, task_id: int) -> bool:
+        """完成资源采集任务"""
+        try:
+            await self.conn.execute("BEGIN")
+            # 更新任务状态为已完成
+            await self.conn.execute(
+                "UPDATE resource_collection_queue SET collected = TRUE WHERE id = ?",
+                (task_id,)
+            )
+
+            # 检查是否更新成功
+            async with self.conn.execute(
+                    "SELECT collected FROM resource_collection_queue WHERE id = ?",
+                    (task_id,)) as cursor:
+                row = await cursor.fetchone()
+                if not row or not row['collected']:
+                    await self.conn.rollback()
+                    return False
+
+            await self.conn.commit()
+            return True
+        except aiosqlite.Error as e:
+            await self.conn.rollback()
+            logger.error(f"完成资源采集任务失败: {e}")
+            return False
+
+    async def get_completed_resource_collection_tasks(self, user_id: str) -> List[Dict[str, Any]]:
+        """获取用户已完成但未领取的采集任务"""
+        async with self.conn.execute(
+                "SELECT * FROM resource_collection_queue WHERE user_id = ? AND collected = TRUE",
+                (user_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def remove_completed_resource_collection_task(self, task_id: int):
+        """移除已完成的采集任务"""
+        await self.conn.execute("DELETE FROM resource_collection_queue WHERE id = ?", (task_id,))
+        await self.conn.commit()

@@ -172,3 +172,17 @@ class AttackResult:
     message: str
     battle_over: bool = False
     updated_players: List[Player] = field(default_factory=list)
+
+
+@dataclass
+class ResourceCollectionTask:
+    """资源采集任务数据模型"""
+
+    id: int
+    user_id: str
+    map_name: str
+    resource_name: str
+    start_time: float
+    completion_time: float
+    quantity: int
+    collected: bool = False

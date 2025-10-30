@@ -7,7 +7,7 @@ import aiosqlite
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 12  # 版本号提升
+LATEST_DB_VERSION = 13  # 版本号提升
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -182,6 +182,8 @@ async def _create_all_tables_v11(conn: aiosqlite.Connection):
                            TEXT,
                            current_map
                            TEXT,
+                           avatar
+                           TEXT,
                            FOREIGN
                            KEY
                        (
@@ -320,6 +322,90 @@ async def _create_all_tables_v11(conn: aiosqlite.Connection):
                            user_id
                        ),
                            FOREIGN KEY
+                       (
+                           user_id
+                       ) REFERENCES players
+                       (
+                           user_id
+                       ) ON DELETE CASCADE
+                           )
+                       """)
+    # 添加资源采集相关表
+    await conn.execute("""
+                       CREATE TABLE IF NOT EXISTS map_resources
+                       (
+                           id
+                           INTEGER
+                           PRIMARY
+                           KEY
+                           AUTOINCREMENT,
+                           map_name
+                           TEXT
+                           NOT
+                           NULL,
+                           resource_name
+                           TEXT
+                           NOT
+                           NULL,
+                           current_quantity
+                           INTEGER
+                           NOT
+                           NULL
+                           DEFAULT
+                           0,
+                           last_refresh_time
+                           REAL
+                           NOT
+                           NULL
+                           DEFAULT
+                           0,
+                           UNIQUE
+                       (
+                           map_name,
+                           resource_name
+                       )
+                           )
+                       """)
+    await conn.execute("""
+                       CREATE TABLE IF NOT EXISTS resource_collection_queue
+                       (
+                           id
+                           INTEGER
+                           PRIMARY
+                           KEY
+                           AUTOINCREMENT,
+                           user_id
+                           TEXT
+                           NOT
+                           NULL,
+                           map_name
+                           TEXT
+                           NOT
+                           NULL,
+                           resource_name
+                           TEXT
+                           NOT
+                           NULL,
+                           start_time
+                           REAL
+                           NOT
+                           NULL,
+                           completion_time
+                           REAL
+                           NOT
+                           NULL,
+                           quantity
+                           INTEGER
+                           NOT
+                           NULL,
+                           collected
+                           BOOLEAN
+                           NOT
+                           NULL
+                           DEFAULT
+                           FALSE,
+                           FOREIGN
+                           KEY
                        (
                            user_id
                        ) REFERENCES players
@@ -748,3 +834,99 @@ async def _upgrade_v11_to_v12(conn: aiosqlite.Connection, config_manager: Config
                        """)
 
     logger.info("v11 -> v12 数据库迁移完成！")
+
+
+# 添加新的迁移版本13，用于添加资源采集相关表
+@migration(13)
+async def _upgrade_v12_to_v13(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """添加资源采集相关表"""
+    logger.info("开始执行 v12 -> v13 数据库迁移...")
+
+    # 创建地图资源表
+    await conn.execute("""
+                       CREATE TABLE IF NOT EXISTS map_resources
+                       (
+                           id
+                           INTEGER
+                           PRIMARY
+                           KEY
+                           AUTOINCREMENT,
+                           map_name
+                           TEXT
+                           NOT
+                           NULL,
+                           resource_name
+                           TEXT
+                           NOT
+                           NULL,
+                           current_quantity
+                           INTEGER
+                           NOT
+                           NULL
+                           DEFAULT
+                           0,
+                           last_refresh_time
+                           REAL
+                           NOT
+                           NULL
+                           DEFAULT
+                           0,
+                           UNIQUE
+                       (
+                           map_name,
+                           resource_name
+                       )
+                           )
+                       """)
+
+    # 创建资源采集队列表
+    await conn.execute("""
+                       CREATE TABLE IF NOT EXISTS resource_collection_queue
+                       (
+                           id
+                           INTEGER
+                           PRIMARY
+                           KEY
+                           AUTOINCREMENT,
+                           user_id
+                           TEXT
+                           NOT
+                           NULL,
+                           map_name
+                           TEXT
+                           NOT
+                           NULL,
+                           resource_name
+                           TEXT
+                           NOT
+                           NULL,
+                           start_time
+                           REAL
+                           NOT
+                           NULL,
+                           completion_time
+                           REAL
+                           NOT
+                           NULL,
+                           quantity
+                           INTEGER
+                           NOT
+                           NULL,
+                           collected
+                           BOOLEAN
+                           NOT
+                           NULL
+                           DEFAULT
+                           FALSE,
+                           FOREIGN
+                           KEY
+                       (
+                           user_id
+                       ) REFERENCES players
+                       (
+                           user_id
+                       ) ON DELETE CASCADE
+                           )
+                       """)
+
+    logger.info("v12 -> v13 数据库迁移完成！")

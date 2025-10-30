@@ -18,7 +18,8 @@ class ConfigManager:
             "monster": base_dir / "config" / "monsters.json",
             "realm": base_dir / "config" / "realms.json",
             "tag": base_dir / "config" / "tags.json",
-            "world_map": base_dir / "config" / "world_map.json"
+            "world_map": base_dir / "config" / "world_map.json",
+            "resources": base_dir / "config" / "resources.json"
         }
 
         self.level_data: List[dict] = []
@@ -28,6 +29,7 @@ class ConfigManager:
         self.realm_data: Dict[str, dict] = {}
         self.tag_data: Dict[str, dict] = {}
         self.world_map_data: Dict[str, dict] = {}
+        self.resources_data: Dict[str, dict] = {}
 
         self.level_map: Dict[str, dict] = {}
         self.item_name_to_id: Dict[str, str] = {}
@@ -59,6 +61,7 @@ class ConfigManager:
         self.realm_data = self._load_json_data(self._paths["realm"])
         self.tag_data = self._load_json_data(self._paths["tag"])
         self.world_map_data = self._load_json_data(self._paths["world_map"])
+        self.resources_data = self._load_json_data(self._paths["resources"])
 
         self.level_map = {info["level_name"]: {"index": i, **info}
                           for i, info in enumerate(self.level_data) if "level_name" in info}
@@ -99,4 +102,17 @@ class ConfigManager:
         map_id = self.world_map_name_to_id.get(name)
         if map_id and "地图" in self.world_map_data and map_id in self.world_map_data["地图"]:
             return (map_id, self.world_map_data["地图"][map_id])
+        return None
+
+    def get_resources_by_map(self, map_name: str) -> Optional[Dict[str, dict]]:
+        """获取指定地图的资源点信息"""
+        if "资源点" in self.resources_data and map_name in self.resources_data["资源点"]:
+            return self.resources_data["资源点"][map_name]
+        return None
+
+    def get_resource_by_name(self, map_name: str, resource_name: str) -> Optional[Dict[str, Any]]:
+        """获取指定地图中特定资源点的信息"""
+        resources = self.get_resources_by_map(map_name)
+        if resources and resource_name in resources:
+            return resources[resource_name]
         return None

@@ -292,6 +292,14 @@ class XiuXianPlugin(Star):
             return
         async for r in self.map_handler.handle_map_view(event): yield r
 
+    @filter.command(移动, "移动到指定地图")
+    async def handle_move(self, event: AstrMessageEvent, target_map: str):
+        """移动+地图名:移动青云山脉"""
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.map_handler.handle_move(event, target_map): yield r
+
     @filter.command(世界地图, "查看世界地图")
     async def handle_world_map(self, event: AstrMessageEvent):
         """查看世界地图"""
@@ -300,13 +308,29 @@ class XiuXianPlugin(Star):
             return
         async for r in self.map_handler.handle_world_map(event): yield r
 
-    @filter.command(移动, "移动到指定地图")
-    async def handle_move(self, event: AstrMessageEvent, target_map: str):
-        """移动+地图名：移动新手村"""
+    @filter.command(采集, "采集地图上的资源")
+    async def handle_collect_resource(self, event: AstrMessageEvent, resource_name: str = ""):
+        """采集+资源名:采集灵石矿脉"""
         if not self._check_access(event):
             await self._send_access_denied_message(event)
             return
-        async for r in self.map_handler.handle_move(event, target_map): yield r
+        async for r in self.map_handler.handle_collect_resource(event, resource_name): yield r
+
+    @filter.command(查看采集, "查看采集进度")
+    async def handle_check_collection(self, event: AstrMessageEvent):
+        """查看当前采集任务进度"""
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.map_handler.handle_check_collection(event): yield r
+
+    @filter.command(领取资源, "领取已完成的采集资源")
+    async def handle_claim_resource(self, event: AstrMessageEvent):
+        """领取已完成的采集资源"""
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.map_handler.handle_claim_resource(event): yield r
 
     # --- 角色创建指令 ---
 
