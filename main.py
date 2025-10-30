@@ -29,7 +29,7 @@ class XiuXianPlugin(Star):
         self.config_manager = ConfigManager(_current_dir)
 
         files_config = self.config.get("FILES", {})
-        db_file = files_config.get("DATABASE_FILE", "xiuxian_data.db")
+        db_file = files_config.get("DATABASE_FILE", "re_xiuxian_data.db")
         self.db = DataBase(db_file)
 
         self.misc_handler = MiscHandler(self.db)

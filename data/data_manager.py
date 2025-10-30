@@ -15,7 +15,7 @@ class DataBase:
     """数据库管理器，封装所有数据库操作"""
 
     def __init__(self, db_file_name: str):
-        data_dir = StarTools.get_data_dir("xiuxian")
+        data_dir = StarTools.get_data_dir("re_xiuxian")
         data_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = data_dir / db_file_name
         self.conn: Optional[aiosqlite.Connection] = None
