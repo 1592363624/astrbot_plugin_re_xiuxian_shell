@@ -405,6 +405,14 @@ class DataBase:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
+    async def get_completed_resource_collection_tasks(self, user_id: str) -> List[Dict[str, Any]]:
+        """获取用户已完成的采集任务"""
+        async with self.conn.execute(
+                "SELECT * FROM resource_collection_queue WHERE user_id = ? AND completion_time <= ? AND collected = FALSE",
+                (user_id, time.time())) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
     async def complete_resource_collection_task(self, task_id: int) -> bool:
         """完成资源采集任务"""
         try:
@@ -431,15 +439,16 @@ class DataBase:
             logger.error(f"完成资源采集任务失败: {e}")
             return False
 
-    async def get_completed_resource_collection_tasks(self, user_id: str) -> List[Dict[str, Any]]:
-        """获取用户已完成但未领取的采集任务"""
-        async with self.conn.execute(
-                "SELECT * FROM resource_collection_queue WHERE user_id = ? AND collected = TRUE",
-                (user_id,)) as cursor:
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
-
     async def remove_completed_resource_collection_task(self, task_id: int):
         """移除已完成的采集任务"""
         await self.conn.execute("DELETE FROM resource_collection_queue WHERE id = ?", (task_id,))
         await self.conn.commit()
+
+    async def get_all_pending_resource_tasks(self) -> List[Dict[str, Any]]:
+        """获取所有待完成的资源采集任务"""
+        current_time = time.time()
+        async with self.conn.execute(
+                "SELECT * FROM resource_collection_queue WHERE completion_time <= ? AND collected = FALSE",
+                (current_time,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]

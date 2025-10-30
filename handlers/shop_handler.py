@@ -82,16 +82,32 @@ class ShopHandler:
 
     @player_required
     async def handle_backpack(self, player: Player, event: AstrMessageEvent):
-        inventory = await self.db.get_inventory_by_user_id(player.user_id, self.config_manager)
-        if not inventory:
-            yield event.plain_result("道友的背包空空如也。")
+        """查看背包"""
+        inventory_items = await self.db.get_inventory_by_user_id(player.user_id, self.config_manager)
+
+        if not inventory_items:
+            yield event.plain_result("你的背包空空如也。")
             return
 
-        reply_msg = f"--- {event.get_sender_name()} 的背包 ---\n"
-        for item in inventory:
-            reply_msg += f"【{item['name']}】x{item['quantity']} - {item['description']}\n"
-        reply_msg += "--------------------------"
-        yield event.plain_result(reply_msg)
+        # 按物品类型分类
+        categorized_items = {}
+        for item in inventory_items:
+            item_type = item.get("type", "未知")
+            if item_type not in categorized_items:
+                categorized_items[item_type] = []
+            categorized_items[item_type].append(item)
+
+        reply_lines = [f"--- {event.get_sender_name()} 的背包 ---"]
+
+        # 按类别显示物品
+        for item_type, items in categorized_items.items():
+            reply_lines.append(f"【{item_type}】")
+            for item in items:
+                reply_lines.append(f"  {item['name']} x{item['quantity']}")
+            reply_lines.append("")
+
+        reply_lines.append("--------------------------")
+        yield event.plain_result("\n".join(reply_lines))
 
     @player_required
     async def handle_buy(self, player: Player, event: AstrMessageEvent, item_name: str, quantity: int):

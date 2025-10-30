@@ -6,6 +6,7 @@ from ..data import DataBase
 from ..models import Player
 import time
 import random
+import astrbot.api.message_components as Comp
 
 __all__ = ["MapHandler"]
 
@@ -152,9 +153,34 @@ class MapHandler:
                 yield event.plain_result(f"你已经在采集{resource_name}了，还需要{int(remaining_time)}秒完成。")
                 return
             else:
-                # 任务已完成，但未领取
-                yield event.plain_result(f"你对{resource_name}的采集已经完成，请先领取资源。")
-                return
+                # 任务已完成，自动领取资源
+                resource_config = self.config_manager.get_resource_by_name(current_map_name, resource_name)
+                if resource_config:
+                    resource_type = resource_config['资源类型']
+
+                    # 查找对应的物品ID
+                    resource_item_id = None
+                    for item_id, item_info in self.config_manager.item_data.items():
+                        if item_info.type == "资源" and item_info.name == resource_type:
+                            resource_item_id = item_id
+                            break
+
+                    # 如果没有找到对应的物品，创建一个虚拟ID
+                    if not resource_item_id:
+                        resource_item_id = f"resource_{resource_type}"
+
+                    # 添加资源到背包
+                    await self.db.add_items_to_inventory_in_transaction(
+                        player.user_id, {resource_item_id: existing_task['quantity']})
+
+                    # 标记任务为已完成
+                    await self.db.complete_resource_collection_task(existing_task['id'])
+
+                    # 移除任务
+                    await self.db.remove_completed_resource_collection_task(existing_task['id'])
+
+                    yield event.plain_result(
+                        f"采集完成！获得了 {existing_task['quantity']} 个{resource_type}，已自动存入背包。")
 
         # 检查资源点是否有足够资源
         resource_status = await self.db.get_map_resource(current_map_name, resource_name)
@@ -204,8 +230,45 @@ class MapHandler:
         new_quantity = resource_status['current_quantity'] - collected_quantity
         await self.db.update_map_resource(current_map_name, resource_name,
                                           new_quantity, resource_status['last_refresh_time'])
-
+        
         yield event.plain_result(f"开始采集{resource_name}，需要{collection_time}秒，预计获得{collected_quantity}个。")
+
+    async def check_and_complete_resource_collections(self):
+        """检查并完成所有已完成的资源采集任务"""
+        pending_tasks = await self.db.get_all_pending_resource_tasks()
+        completed_notifications = []
+
+        for task in pending_tasks:
+            # 自动将资源添加到玩家背包
+            resource_config = self.config_manager.get_resource_by_name(task['map_name'], task['resource_name'])
+            if resource_config:
+                resource_type = resource_config['资源类型']
+
+                # 查找对应的物品ID
+                resource_item_id = None
+                for item_id, item_info in self.config_manager.item_data.items():
+                    if item_info.type == "资源" and item_info.name == resource_type:
+                        resource_item_id = item_id
+                        break
+
+                # 如果没有找到对应的物品，创建一个虚拟ID
+                if not resource_item_id:
+                    resource_item_id = f"resource_{resource_type}"
+
+                # 添加资源到背包
+                await self.db.add_items_to_inventory_in_transaction(
+                    task['user_id'], {resource_item_id: task['quantity']})
+
+                # 标记任务为已完成
+                await self.db.complete_resource_collection_task(task['id'])
+
+                # 添加通知消息
+                completed_notifications.append({
+                    "user_id": task['user_id'],
+                    "message": f"你在{task['map_name']}采集的{task['resource_name']}已完成，获得了{task['quantity']}个{resource_type}。"
+                })
+
+        return completed_notifications
 
     @player_required
     async def handle_check_collection(self, player: Player, event: AstrMessageEvent):
@@ -222,7 +285,7 @@ class MapHandler:
         for task in tasks:
             remaining_time = task['completion_time'] - current_time
             if remaining_time <= 0:
-                reply_lines.append(f"✅ {task['resource_name']}：已完成，可以领取")
+                reply_lines.append(f"✅ {task['resource_name']}：已完成")
             else:
                 reply_lines.append(f"⏳ {task['resource_name']}：剩余 {int(remaining_time)} 秒")
 
@@ -234,41 +297,29 @@ class MapHandler:
         completed_tasks = await self.db.get_completed_resource_collection_tasks(player.user_id)
 
         if not completed_tasks:
-            # 检查是否有进行中的任务已经完成但未标记
-            active_tasks = await self.db.get_user_active_collection_tasks(player.user_id)
-            ready_to_claim = []
-            current_time = time.time()
-
-            for task in active_tasks:
-                if task['completion_time'] <= current_time:
-                    ready_to_claim.append(task)
-
-            if not ready_to_claim:
-                yield event.plain_result("你没有已完成的采集任务可以领取。")
-                return
-
-            completed_tasks = ready_to_claim
+            yield event.plain_result("你没有已完成的采集任务可以领取。")
+            return
 
         total_collected = {}
         claimed_task_ids = []
 
         for task in completed_tasks:
-            resource_type = self.config_manager.get_resource_by_name(
-                task['map_name'], task['resource_name'])['资源类型']
+            resource_config = self.config_manager.get_resource_by_name(
+                task['map_name'], task['resource_name'])
 
-            # 累计资源
-            if resource_type not in total_collected:
-                total_collected[resource_type] = 0
-            total_collected[resource_type] += task['quantity']
+            if resource_config:
+                resource_type = resource_config['资源类型']
 
-            # 标记任务为已领取
-            if 'id' in task:  # 已经在数据库中的任务
-                success = await self.db.complete_resource_collection_task(task['id'])
-                if success:
-                    claimed_task_ids.append(task['id'])
-            else:  # 临时任务（还未存入数据库）
-                # 这种情况下我们直接添加到背包中
-                pass
+                # 累计资源
+                if resource_type not in total_collected:
+                    total_collected[resource_type] = 0
+                total_collected[resource_type] += task['quantity']
+
+                # 标记任务为已领取
+                if 'id' in task:
+                    success = await self.db.complete_resource_collection_task(task['id'])
+                    if success:
+                        claimed_task_ids.append(task['id'])
 
         # 给玩家添加资源（这里简化处理，实际应该添加到玩家的资源背包中）
         reply_lines = ["🎉 采集完成，获得资源："]

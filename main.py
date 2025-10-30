@@ -3,6 +3,7 @@ from pathlib import Path
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image
+import astrbot.api.message_components as Comp
 from astrbot.api.star import Context, Star, register
 # 从专门的指令配置文件导入
 from data.plugins.astrbot_plugin_re_xiuxian_shell.commands import *
@@ -324,15 +325,32 @@ class XiuXianPlugin(Star):
             return
         async for r in self.map_handler.handle_check_collection(event): yield r
 
-    @filter.command(领取资源, "领取已完成的采集资源")
-    async def handle_claim_resource(self, event: AstrMessageEvent):
-        """领取已完成的采集资源"""
-        if not self._check_access(event):
-            await self._send_access_denied_message(event)
-            return
-        async for r in self.map_handler.handle_claim_resource(event): yield r
 
     # --- 角色创建指令 ---
+    async def on_message(self, event: AstrMessageEvent):
+        """消息处理入口"""
+        # 处理玩家创建流程
+        user_id = event.get_sender_id()
+        creation_state = await self.db.get_player_creation_state(user_id)
+
+        if creation_state == "awaiting_name":
+            async for r in self.creation_handler.handle_player_name_input(event): yield r
+            return
+
+        if creation_state == "awaiting_avatar":
+            async for r in self.creation_handler.handle_player_avatar_input(event): yield r
+            return
+
+        # 检查是否有已完成的资源采集任务
+        completed_notifications = await self.map_handler.check_and_complete_resource_collections()
+        for notification in completed_notifications:
+            if notification["user_id"] == user_id:
+                # 使用CQ码格式发送@消息
+                message_chain = [
+                    Comp.At(qq=user_id),
+                    Comp.Plain(text=" " + notification['message'])
+                ]
+                yield event.chain_result(message_chain)
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def handle_message(self, event: AstrMessageEvent):
