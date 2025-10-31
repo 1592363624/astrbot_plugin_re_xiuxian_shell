@@ -135,14 +135,12 @@ class MapHandler:
     @player_required
     async def handle_collect_resource(self, player: Player, event: AstrMessageEvent, resource_name: str = ""):
         """采集资源"""
-        logger.info(f"用户 {player.user_id} 尝试采集资源: {resource_name}")
         if not resource_name:
             yield event.plain_result("指令格式错误！请使用「采集 <资源名>」。")
             return
 
         current_map_name = player.current_map
         resource_config = self.config_manager.get_resource_by_name(current_map_name, resource_name)
-        logger.info(f"资源配置: {resource_config}")
 
         if not resource_config:
             yield event.plain_result(f"在「{current_map_name}」找不到名为「{resource_name}」的资源点。")
@@ -150,7 +148,6 @@ class MapHandler:
 
         # 检查是否已经有正在进行的采集任务
         existing_task = await self.db.get_resource_collection_task(player.user_id, current_map_name, resource_name)
-        logger.info(f"现有任务: {existing_task}")
         if existing_task:
             remaining_time = existing_task['completion_time'] - time.time()
             if remaining_time > 0:
@@ -163,7 +160,6 @@ class MapHandler:
 
         # 检查资源点是否有足够资源
         resource_status = await self.db.get_map_resource(current_map_name, resource_name)
-        logger.info(f"资源状态: {resource_status}")
         current_time = time.time()
 
         # 如果资源点不存在，初始化它
@@ -192,24 +188,19 @@ class MapHandler:
         collection_time = resource_config['每次采集时间']
         start_time = current_time
         completion_time = start_time + collection_time
-        logger.info(f"采集时间: {collection_time}秒, 开始时间: {start_time}, 完成时间: {completion_time}")
 
         # 计算采集数量
         quantity_range = resource_config['每次采集数量范围']
         collected_quantity = random.randint(quantity_range[0], quantity_range[1])
-        logger.info(f"采集数量范围: {quantity_range}, 随机采集数量: {collected_quantity}")
 
         # 限制采集数量不超过当前资源量
         collected_quantity = min(collected_quantity, resource_status['current_quantity'])
-        logger.info(f"最终采集数量: {collected_quantity}")
 
         # 添加采集任务（包含会话ID，用于后续主动通知）
-        session_id = event.unified_msg_origin
-        logger.info(f"记录会话ID: {session_id}")
         await self.db.add_resource_collection_task(
             player.user_id, current_map_name, resource_name,
             start_time, completion_time, collected_quantity,
-            session_id=session_id  # 添加会话ID
+            session_id=event.unified_msg_origin  # 添加会话ID
         )
 
         # 减少资源点的资源量
@@ -221,18 +212,14 @@ class MapHandler:
 
     async def check_and_complete_resource_collections(self):
         """检查并完成所有已完成的资源采集任务"""
-        logger.info("检查资源采集任务...")
         pending_tasks = await self.db.get_all_pending_resource_tasks()
-        logger.info(f"找到 {len(pending_tasks)} 个待处理任务")
         completed_notifications = []
 
         for task in pending_tasks:
-            logger.info(f"处理任务: {task}")
             # 自动将资源添加到玩家背包
             resource_config = self.config_manager.get_resource_by_name(task['map_name'], task['resource_name'])
             if resource_config:
                 resource_type = resource_config['资源类型']
-                logger.info(f"任务 {task['id']} 的资源类型: {resource_type}")
 
                 # 查找对应的物品ID
                 resource_item_id = None
@@ -246,28 +233,22 @@ class MapHandler:
                     resource_item_id = f"resource_{resource_type}"
 
                 # 添加资源到背包
-                logger.info(f"为用户 {task['user_id']} 添加 {task['quantity']} 个 {resource_type} 到背包")
                 await self.db.add_items_to_inventory_in_transaction(
                     task['user_id'], {resource_item_id: task['quantity']})
 
                 # 标记任务为已完成
-                logger.info(f"标记任务 {task['id']} 为已完成")
                 await self.db.complete_resource_collection_task(task['id'])
 
                 # 添加通知消息
-                notification = {
+                completed_notifications.append({
                     "user_id": task['user_id'],
                     "message": f"你在{task['map_name']}采集的{task['resource_name']}已完成，获得了{task['quantity']}个{resource_type}。",
                     "session_id": task.get('session_id')  # 添加会话ID，用于主动发送消息
-                }
-                logger.info(f"创建通知: {notification}")
-                completed_notifications.append(notification)
-
+                })
+                
                 # 移除已完成的任务
-                logger.info(f"移除已完成的任务 {task['id']}")
                 await self.db.remove_completed_resource_collection_task(task['id'])
 
-        logger.info(f"返回 {len(completed_notifications)} 个完成通知")
         return completed_notifications
 
     @player_required

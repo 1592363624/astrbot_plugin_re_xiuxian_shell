@@ -117,28 +117,19 @@ class XiuXianPlugin(Star):
     async def check_resource_collections(self):
         """定时检查资源采集任务并发送通知"""
         try:
-            logger.info("开始检查资源采集任务...")
             # 检查是否有已完成的资源采集任务
             completed_notifications = await self.map_handler.check_and_complete_resource_collections()
-            logger.info(f"发现 {len(completed_notifications)} 个已完成的采集任务")
-
+            
             for notification in completed_notifications:
-                logger.info(f"处理通知: {notification}")
                 # 如果有会话ID，主动发送消息并@用户
                 if "session_id" in notification and notification["session_id"]:
-                    logger.info(f"发送通知到会话: {notification['session_id']}")
                     # 只在群聊中发送主动通知
                     if ":GroupMessage:" in notification["session_id"]:
-                        logger.info(f"向群聊 {notification['session_id']} 发送通知并@用户 {notification['user_id']}")
                         await self.send_message_to_session(
                             notification["session_id"],
-                            notification['message'],
+                            notification['message'], 
                             [notification["user_id"]]
                         )
-                    else:
-                        logger.info(f"会话 {notification['session_id']} 不是群聊，跳过主动通知")
-                else:
-                    logger.info("通知中没有会话ID，跳过主动通知")
         except Exception as e:
             logger.error(f"检查资源采集任务时出错: {e}", exc_info=True)
 
