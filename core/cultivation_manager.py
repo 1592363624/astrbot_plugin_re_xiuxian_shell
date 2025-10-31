@@ -44,6 +44,8 @@ class CultivationManager:
             user_id=user_id,
             spiritual_root=f"{root}灵根",
             gold=self.config["VALUES"]["INITIAL_GOLD"],
+            mana=100,  # 初始灵力值
+            max_mana=100,  # 初始最大灵力值
             **initial_stats
         )
 

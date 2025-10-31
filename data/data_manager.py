@@ -33,6 +33,16 @@ class DataBase:
             self.conn = None
             logger.info("数据库连接已关闭。")
 
+    async def get_all_players(self) -> List[Player]:
+        """获取所有玩家"""
+        try:
+            async with self.conn.execute("SELECT * FROM players") as cursor:
+                rows = await cursor.fetchall()
+                return [Player(**dict(row)) for row in rows]
+        except Exception as e:
+            logger.error(f"获取所有玩家数据时出错: {e}")
+            return []
+
     async def get_active_bosses(self) -> List[ActiveWorldBoss]:
         async with self.conn.execute("SELECT * FROM active_world_bosses") as cursor:
             rows = await cursor.fetchall()

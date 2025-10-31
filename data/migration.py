@@ -7,7 +7,7 @@ import aiosqlite
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 14  # 版本号提升
+LATEST_DB_VERSION = 15  # 版本号提升
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -184,6 +184,10 @@ async def _create_all_tables_v11(conn: aiosqlite.Connection):
                            TEXT,
                            avatar
                            TEXT,
+                           mana
+                           INTEGER,
+                           max_mana
+                           INTEGER,
                            FOREIGN
                            KEY
                        (
@@ -447,6 +451,8 @@ async def _upgrade_v2_to_v3(conn: aiosqlite.Connection, config_manager: ConfigMa
     if 'max_hp' not in columns: await conn.execute("ALTER TABLE players ADD COLUMN max_hp INTEGER NOT NULL DEFAULT 100")
     if 'attack' not in columns: await conn.execute("ALTER TABLE players ADD COLUMN attack INTEGER NOT NULL DEFAULT 10")
     if 'defense' not in columns: await conn.execute("ALTER TABLE players ADD COLUMN defense INTEGER NOT NULL DEFAULT 5")
+    if 'mana' not in columns: await conn.execute("ALTER TABLE players ADD COLUMN mana INTEGER")  # 添加mana字段
+    if 'max_mana' not in columns: await conn.execute("ALTER TABLE players ADD COLUMN max_mana INTEGER")  # 添加max_mana字段
 
 
 @migration(4)
@@ -530,6 +536,10 @@ async def _upgrade_v4_to_v5(conn: aiosqlite.Connection, config_manager: ConfigMa
                                    NULL
                                    DEFAULT
                                    0,
+                                   mana
+                                   INTEGER,
+                                   max_mana
+                                   INTEGER,
                                    FOREIGN
                                    KEY
                                (
@@ -562,6 +572,8 @@ async def _upgrade_v4_to_v5(conn: aiosqlite.Connection, config_manager: ConfigMa
                            defense          INTEGER NOT NULL,
                            realm_id         TEXT,
                            realm_floor      INTEGER NOT NULL DEFAULT 0,
+                           mana     INTEGER,
+                           max_mana INTEGER,
                            FOREIGN KEY (sect_id) REFERENCES sects (id) ON DELETE SET NULL
                        )
                        """)
@@ -588,7 +600,9 @@ async def _upgrade_v4_to_v5(conn: aiosqlite.Connection, config_manager: ConfigMa
                 'attack': old_data.get('attack', 10),
                 'defense': old_data.get('defense', 5),
                 'realm_id': old_data.get('realm_id'),
-                'realm_floor': old_data.get('realm_floor', 0)
+                'realm_floor': old_data.get('realm_floor', 0),
+                'mana': 100,  # 新增字段，设置默认值
+                'max_mana': 100  # 新增字段，设置默认值
             }
 
             columns = ", ".join(new_data.keys())
@@ -812,7 +826,6 @@ async def _upgrade_v10_to_v11(conn: aiosqlite.Connection, config_manager: Config
     logger.info("v10 -> v11 数据库迁移完成！")
 
 
-# 添加新的迁移版本12，用于添加avatar字段
 @migration(12)
 async def _upgrade_v11_to_v12(conn: aiosqlite.Connection, config_manager: ConfigManager):
     """为players表添加avatar字段，并将player_creation_data中的头像数据迁移到players表"""
@@ -920,6 +933,8 @@ async def _upgrade_v12_to_v13(conn: aiosqlite.Connection, config_manager: Config
                            NULL
                            DEFAULT
                            FALSE,
+                           session_id
+                           TEXT,
                            FOREIGN
                            KEY
                        (
@@ -944,3 +959,25 @@ async def _upgrade_v13_to_v14(conn: aiosqlite.Connection, config_manager: Config
     if 'session_id' not in columns:
         await conn.execute("ALTER TABLE resource_collection_queue ADD COLUMN session_id TEXT")
     logger.info("v13 -> v14 数据库迁移完成！")
+
+
+@migration(15)
+async def _upgrade_v14_to_v15(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """为players表添加mana和max_mana字段，用于灵力系统"""
+    logger.info("开始执行 v14 -> v15 数据库迁移...")
+    cursor = await conn.execute("PRAGMA table_info(players)")
+    columns = [row['name'] for row in await cursor.fetchall()]
+
+    # 添加mana字段（当前灵力值）
+    if 'mana' not in columns:
+        await conn.execute("ALTER TABLE players ADD COLUMN mana INTEGER")
+
+    # 添加max_mana字段（最大灵力值）
+    if 'max_mana' not in columns:
+        await conn.execute("ALTER TABLE players ADD COLUMN max_mana INTEGER")
+
+    # 为现有玩家设置默认灵力值
+    await conn.execute("UPDATE players SET mana = 100 WHERE mana IS NULL")
+    await conn.execute("UPDATE players SET max_mana = 100 WHERE max_mana IS NULL")
+
+    logger.info("v14 -> v15 数据库迁移完成！")

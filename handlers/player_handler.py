@@ -71,6 +71,7 @@ class PlayerHandler:
             f"灵根：{player.spiritual_root}\n"
             f"修为：{player.experience}\n"
             f"灵石：{player.gold}\n"
+            f"灵力：{player.mana}/{player.max_mana}\n"
             f"{sect_info}\n"
             f"状态：{player.state}\n"
             f"形象：{avatar_status}\n"

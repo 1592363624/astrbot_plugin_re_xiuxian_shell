@@ -54,6 +54,8 @@ class Player:
     state_start_time: float = 0.0
     sect_id: Optional[int] = None
     sect_name: Optional[str] = None
+    mana: int = 100  # 灵力值
+    max_mana: int = 100  # 最大灵力值
     hp: int = 100
     max_hp: int = 100
     attack: int = 10

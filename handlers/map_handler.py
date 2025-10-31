@@ -139,6 +139,11 @@ class MapHandler:
             yield event.plain_result("指令格式错误！请使用「采集 <资源名>」。")
             return
 
+        # 检查玩家是否有足够的灵力进行采集
+        if player.mana < 10:  # 采集需要消耗10点灵力
+            yield event.plain_result("你的灵力不足，无法进行采集。请等待灵力恢复或使用回复灵力的物品。")
+            return
+
         current_map_name = player.current_map
         resource_config = self.config_manager.get_resource_by_name(current_map_name, resource_name)
 
@@ -184,6 +189,11 @@ class MapHandler:
             yield event.plain_result(f"{resource_name}已经枯竭，请等待刷新。")
             return
 
+        # 扣除灵力
+        p_clone = player.clone()
+        p_clone.mana -= 10  # 消耗10点灵力
+        await self.db.update_player(p_clone)
+
         # 创建采集任务
         collection_time = resource_config['每次采集时间']
         start_time = current_time
@@ -207,8 +217,9 @@ class MapHandler:
         new_quantity = resource_status['current_quantity'] - collected_quantity
         await self.db.update_map_resource(current_map_name, resource_name,
                                           new_quantity, resource_status['last_refresh_time'])
-        
-        yield event.plain_result(f"开始采集{resource_name}，需要{collection_time}秒，预计获得{collected_quantity}个。")
+
+        yield event.plain_result(
+            f"开始采集{resource_name}，需要{collection_time}秒，预计获得{collected_quantity}个。消耗灵力10点，剩余灵力{p_clone.mana}。")
 
     async def check_and_complete_resource_collections(self):
         """检查并完成所有已完成的资源采集任务"""

@@ -56,6 +56,8 @@ class XiuXianPlugin(Star):
 
         # 添加定时任务调度器
         self.scheduler = AsyncIOScheduler()
+        # 添加灵力恢复任务，每分钟恢复1点灵力
+        self.scheduler.add_job(self.recover_mana, 'interval', minutes=1)
         # 每10秒检查一次资源采集任务
         self.scheduler.add_job(self.check_resource_collections, 'interval', seconds=10)
         self.scheduler.start()
@@ -487,3 +489,15 @@ class XiuXianPlugin(Star):
                 return
 
         # 可以在这里添加更多基于状态的消息处理
+
+    async def recover_mana(self):
+        """每分钟恢复所有玩家的灵力"""
+        try:
+            players = await self.db.get_all_players()
+            for player in players:
+                if player.mana < player.max_mana:
+                    p_clone = player.clone()
+                    p_clone.mana = min(p_clone.max_mana, p_clone.mana + 1)  # 每分钟恢复1点灵力
+                    await self.db.update_player(p_clone)
+        except Exception as e:
+            logger.error(f"恢复灵力时出错: {e}", exc_info=True)
