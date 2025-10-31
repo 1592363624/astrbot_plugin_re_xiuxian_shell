@@ -1,7 +1,9 @@
+import asyncio
+import time
 from pathlib import Path
 
 from astrbot.api import logger, AstrBotConfig
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import Image
 import astrbot.api.message_components as Comp
 from astrbot.api.star import Context, Star, register
@@ -13,6 +15,9 @@ from .handlers import (
     MiscHandler, PlayerHandler, ShopHandler, SectHandler, CombatHandler, RealmHandler,
     EquipmentHandler, MapHandler, CreationHandler
 )
+
+# 添加定时任务调度器
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 @register(
@@ -45,6 +50,15 @@ class XiuXianPlugin(Star):
 
         access_control_config = self.config.get("ACCESS_CONTROL", {})
         self.whitelist_groups = [str(g) for g in access_control_config.get("WHITELIST_GROUPS", [])]
+
+        # 存储延迟消息任务
+        self.delayed_tasks = {}
+
+        # 添加定时任务调度器
+        self.scheduler = AsyncIOScheduler()
+        # 每10秒检查一次资源采集任务
+        self.scheduler.add_job(self.check_resource_collections, 'interval', seconds=10)
+        self.scheduler.start()
 
         logger.info("【重生之凡人修仙】 __init__ 方法成功执行完毕。")
 
@@ -90,14 +104,126 @@ class XiuXianPlugin(Star):
 
     async def terminate(self):
         await self.db.close()
+        # 取消所有延迟任务
+        for task in self.delayed_tasks.values():
+            if not task.done():
+                task.cancel()
+        # 关闭定时任务调度器
+        if self.scheduler:
+            self.scheduler.shutdown()
         logger.info("重生之凡人修仙插件已卸载。")
 
-    # @filter.command(修仙帮助, "显示帮助信息")
-    # async def handle_help(self, event: AstrMessageEvent):
-    #     if not self._check_access(event):
-    #         await self._send_access_denied_message(event)
-    #         return
-    #     async for r in self.misc_handler.handle_help(event): yield r
+    # 新增：定时检查资源采集任务
+    async def check_resource_collections(self):
+        """定时检查资源采集任务并发送通知"""
+        try:
+            logger.info("开始检查资源采集任务...")
+            # 检查是否有已完成的资源采集任务
+            completed_notifications = await self.map_handler.check_and_complete_resource_collections()
+            logger.info(f"发现 {len(completed_notifications)} 个已完成的采集任务")
+
+            for notification in completed_notifications:
+                logger.info(f"处理通知: {notification}")
+                # 如果有会话ID，主动发送消息并@用户
+                if "session_id" in notification and notification["session_id"]:
+                    logger.info(f"发送通知到会话: {notification['session_id']}")
+                    # 只在群聊中发送主动通知
+                    if ":GroupMessage:" in notification["session_id"]:
+                        logger.info(f"向群聊 {notification['session_id']} 发送通知并@用户 {notification['user_id']}")
+                        await self.send_message_to_session(
+                            notification["session_id"],
+                            notification['message'],
+                            [notification["user_id"]]
+                        )
+                    else:
+                        logger.info(f"会话 {notification['session_id']} 不是群聊，跳过主动通知")
+                else:
+                    logger.info("通知中没有会话ID，跳过主动通知")
+        except Exception as e:
+            logger.error(f"检查资源采集任务时出错: {e}", exc_info=True)
+
+    # 新增：主动发送消息方法（支持艾特）
+    async def send_message_to_session(self, session_id: str, message: str, at_user_ids: list = None):
+        """
+        主动向指定会话发送消息
+        
+        Args:
+            session_id (str): 会话ID，格式为 platform:MessageType:identifier
+            message (str): 要发送的消息内容
+            at_user_ids (list, optional): 要艾特的用户ID列表
+        """
+        try:
+            # 创建消息链
+            message_components = [Comp.Plain(text=message)]
+
+            # 如果有需要艾特的用户，添加At组件
+            if at_user_ids:
+                for user_id in at_user_ids:
+                    message_components.append(Comp.At(qq=user_id))
+
+            message_chain = MessageChain(message_components)
+            await self.context.send_message(session_id, message_chain)
+            logger.info(f"已向会话 {session_id} 发送消息: {message}")
+        except Exception as e:
+            logger.error(f"向会话 {session_id} 发送消息失败: {e}")
+
+    # 新增：延迟发送消息方法（支持艾特）
+    async def send_delayed_message(self, session_id: str, message: str, delay: int, task_id: str = None,
+                                   at_user_ids: list = None):
+        """
+        延迟指定时间后向会话发送消息
+        
+        Args:
+            session_id (str): 会话ID，格式为 platform:MessageType:identifier
+            message (str): 要发送的消息内容
+            delay (int): 延迟时间（秒）
+            task_id (str, optional): 任务ID，用于取消任务
+            at_user_ids (list, optional): 要艾特的用户ID列表
+        """
+
+        async def _delayed_send():
+            try:
+                await asyncio.sleep(delay)
+                await self.send_message_to_session(session_id, message, at_user_ids)
+                # 任务完成后从字典中移除
+                if task_id and task_id in self.delayed_tasks:
+                    self.delayed_tasks.pop(task_id)
+            except asyncio.CancelledError:
+                logger.info(f"延迟消息任务 {task_id} 已被取消")
+            except Exception as e:
+                logger.error(f"延迟发送消息失败: {e}")
+
+        # 创建任务
+        task = asyncio.create_task(_delayed_send())
+
+        # 如果提供了任务ID，存储任务以便后续取消
+        if task_id:
+            # 取消已存在的同ID任务
+            if task_id in self.delayed_tasks:
+                old_task = self.delayed_tasks[task_id]
+                if not old_task.done():
+                    old_task.cancel()
+            self.delayed_tasks[task_id] = task
+
+        return task
+
+    # 新增：取消延迟消息任务
+    def cancel_delayed_message(self, task_id: str):
+        """
+        取消指定的延迟消息任务
+        
+        Args:
+            task_id (str): 任务ID
+        """
+        if task_id in self.delayed_tasks:
+            task = self.delayed_tasks[task_id]
+            if not task.done():
+                task.cancel()
+                logger.info(f"已取消延迟消息任务 {task_id}")
+            # 从字典中移除
+            self.delayed_tasks.pop(task_id)
+            return True
+        return False
 
     @filter.command(我要修仙, "开始你的修仙之路")
     async def handle_start_xiuxian(self, event: AstrMessageEvent):
@@ -340,17 +466,6 @@ class XiuXianPlugin(Star):
         if creation_state == "awaiting_avatar":
             async for r in self.creation_handler.handle_player_avatar_input(event): yield r
             return
-
-        # 检查是否有已完成的资源采集任务
-        completed_notifications = await self.map_handler.check_and_complete_resource_collections()
-        for notification in completed_notifications:
-            if notification["user_id"] == user_id:
-                # 使用CQ码格式发送@消息
-                message_chain = [
-                    Comp.At(qq=user_id),
-                    Comp.Plain(text=" " + notification['message'])
-                ]
-                yield event.chain_result(message_chain)
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def handle_message(self, event: AstrMessageEvent):

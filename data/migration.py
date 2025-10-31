@@ -7,7 +7,7 @@ import aiosqlite
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 13  # 版本号提升
+LATEST_DB_VERSION = 14  # 版本号提升
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -404,6 +404,8 @@ async def _create_all_tables_v11(conn: aiosqlite.Connection):
                            NULL
                            DEFAULT
                            FALSE,
+                           session_id
+                           TEXT,
                            FOREIGN
                            KEY
                        (
@@ -930,3 +932,15 @@ async def _upgrade_v12_to_v13(conn: aiosqlite.Connection, config_manager: Config
                        """)
 
     logger.info("v12 -> v13 数据库迁移完成！")
+
+
+# 添加新的迁移版本14，用于在resource_collection_queue表中添加session_id字段
+@migration(14)
+async def _upgrade_v13_to_v14(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """为resource_collection_queue表添加session_id字段"""
+    logger.info("开始执行 v13 -> v14 数据库迁移...")
+    cursor = await conn.execute("PRAGMA table_info(resource_collection_queue)")
+    columns = [row['name'] for row in await cursor.fetchall()]
+    if 'session_id' not in columns:
+        await conn.execute("ALTER TABLE resource_collection_queue ADD COLUMN session_id TEXT")
+    logger.info("v13 -> v14 数据库迁移完成！")

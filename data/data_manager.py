@@ -1,5 +1,6 @@
 # data/data_manager.py
 
+import time
 from dataclasses import fields
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -374,14 +375,19 @@ class DataBase:
         await self.conn.commit()
 
     async def add_resource_collection_task(self, user_id: str, map_name: str, resource_name: str,
-                                           start_time: float, completion_time: float, quantity: int):
+                                           start_time: float, completion_time: float, quantity: int,
+                                           session_id: str = None):
         """添加资源采集任务"""
+        logger.info(f"添加采集任务: user_id={user_id}, map_name={map_name}, resource_name={resource_name}, "
+                    f"start_time={start_time}, completion_time={completion_time}, quantity={quantity}, session_id={session_id}")
         await self.conn.execute("""
                                 INSERT INTO resource_collection_queue
-                                (user_id, map_name, resource_name, start_time, completion_time, quantity)
-                                VALUES (?, ?, ?, ?, ?, ?)
-                                """, (user_id, map_name, resource_name, start_time, completion_time, quantity))
+                                (user_id, map_name, resource_name, start_time, completion_time, quantity, session_id)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                (user_id, map_name, resource_name, start_time, completion_time, quantity, session_id))
         await self.conn.commit()
+        logger.info("采集任务添加完成")
 
     async def get_user_active_collection_tasks(self, user_id: str) -> List[Dict[str, Any]]:
         """获取用户正在进行的采集任务"""
@@ -413,9 +419,22 @@ class DataBase:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
+    async def get_all_pending_resource_tasks(self) -> List[Dict[str, Any]]:
+        """获取所有待完成的资源采集任务"""
+        current_time = time.time()
+        logger.info(f"检查时间 <= {current_time} 的待完成任务")
+        async with self.conn.execute(
+                "SELECT * FROM resource_collection_queue WHERE completion_time <= ? AND collected = FALSE",
+                (current_time,)) as cursor:
+            rows = await cursor.fetchall()
+            tasks = [dict(row) for row in rows]
+            logger.info(f"查询到 {len(tasks)} 个待完成任务")
+            return tasks
+
     async def complete_resource_collection_task(self, task_id: int) -> bool:
         """完成资源采集任务"""
         try:
+            logger.info(f"开始完成任务 {task_id}")
             await self.conn.execute("BEGIN")
             # 更新任务状态为已完成
             await self.conn.execute(
@@ -430,9 +449,11 @@ class DataBase:
                 row = await cursor.fetchone()
                 if not row or not row['collected']:
                     await self.conn.rollback()
+                    logger.info(f"任务 {task_id} 更新失败，已回滚")
                     return False
 
             await self.conn.commit()
+            logger.info(f"任务 {task_id} 标记为已完成")
             return True
         except aiosqlite.Error as e:
             await self.conn.rollback()
@@ -441,14 +462,6 @@ class DataBase:
 
     async def remove_completed_resource_collection_task(self, task_id: int):
         """移除已完成的采集任务"""
+        logger.info(f"移除已完成的任务 {task_id}")
         await self.conn.execute("DELETE FROM resource_collection_queue WHERE id = ?", (task_id,))
         await self.conn.commit()
-
-    async def get_all_pending_resource_tasks(self) -> List[Dict[str, Any]]:
-        """获取所有待完成的资源采集任务"""
-        current_time = time.time()
-        async with self.conn.execute(
-                "SELECT * FROM resource_collection_queue WHERE completion_time <= ? AND collected = FALSE",
-                (current_time,)) as cursor:
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
