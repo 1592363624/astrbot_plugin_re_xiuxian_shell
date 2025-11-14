@@ -9,9 +9,19 @@ class SqliteUserRepository:
         self.db_path = db_path
         self._init_table()
 
+    def _get_connection(self):
+        """获取数据库连接并配置WAL模式"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode=WAL;")  # 启用WAL模式
+        conn.execute("PRAGMA synchronous=NORMAL;")  # 平衡性能和数据安全
+        conn.execute("PRAGMA cache_size=10000;")  # 增加缓存大小
+        conn.execute("PRAGMA temp_store=MEMORY;")  # 在内存中存储临时数据
+        conn.row_factory = sqlite3.Row
+        return conn
+
     def _init_table(self):
         """初始化用户表"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
@@ -49,7 +59,7 @@ class SqliteUserRepository:
 
     def create_user(self, user_id: str, nickname: Optional[str] = None) -> User:
         """创建新用户"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT OR IGNORE INTO users (user_id, nickname)
@@ -61,7 +71,7 @@ class SqliteUserRepository:
 
     def get_by_user_id(self, user_id: str) -> Optional[User]:
         """根据用户ID获取用户"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
             row = cursor.fetchone()
@@ -98,7 +108,7 @@ class SqliteUserRepository:
 
     def update_user(self, user: User) -> bool:
         """更新用户信息"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 UPDATE users SET
@@ -153,7 +163,7 @@ class SqliteUserRepository:
 
     def get_cultivation_ranking(self, limit: int = 10) -> List[User]:
         """获取修为排行榜"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT * FROM users 

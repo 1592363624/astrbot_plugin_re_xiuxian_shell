@@ -1,5 +1,8 @@
 -- 修仙插件初始数据库表结构
 
+-- 启用WAL模式以提高并发性能
+PRAGMA journal_mode=WAL;
+
 -- 用户表
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,3 +104,16 @@ CREATE TABLE IF NOT EXISTS migrations (
     name TEXT UNIQUE NOT NULL,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 创建索引以提高查询性能
+CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_cultivation ON users(cultivation);
+CREATE INDEX IF NOT EXISTS idx_items_name ON items(name);
+CREATE INDEX IF NOT EXISTS idx_user_items_user_id ON user_items(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_items_item_id ON user_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_sects_name ON sects(name);
+CREATE INDEX IF NOT EXISTS idx_user_sect_contributions_user_id ON user_sect_contributions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sect_contributions_sect_id ON user_sect_contributions(sect_id);
+CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_logs_type ON logs(type);
+CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);

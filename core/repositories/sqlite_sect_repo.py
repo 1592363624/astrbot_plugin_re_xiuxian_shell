@@ -9,9 +9,19 @@ class SqliteSectRepository:
         self.db_path = db_path
         self._init_table()
 
+    def _get_connection(self):
+        """获取数据库连接并配置WAL模式"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode=WAL;")  # 启用WAL模式
+        conn.execute("PRAGMA synchronous=NORMAL;")  # 平衡性能和数据安全
+        conn.execute("PRAGMA cache_size=10000;")  # 增加缓存大小
+        conn.execute("PRAGMA temp_store=MEMORY;")  # 在内存中存储临时数据
+        conn.row_factory = sqlite3.Row
+        return conn
+
     def _init_table(self):
         """初始化宗门相关表"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             
             # 宗门表
@@ -46,7 +56,7 @@ class SqliteSectRepository:
 
     def create_sect(self, sect: Sect) -> bool:
         """创建宗门"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             try:
                 cursor.execute('''
@@ -64,7 +74,7 @@ class SqliteSectRepository:
 
     def get_by_id(self, sect_id: int) -> Optional[Sect]:
         """根据ID获取宗门"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM sects WHERE id = ?', (sect_id,))
             row = cursor.fetchone()
@@ -85,7 +95,7 @@ class SqliteSectRepository:
 
     def get_by_name(self, name: str) -> Optional[Sect]:
         """根据名称获取宗门"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM sects WHERE name = ?', (name,))
             row = cursor.fetchone()
@@ -106,7 +116,7 @@ class SqliteSectRepository:
 
     def get_all_sects(self) -> List[Sect]:
         """获取所有宗门"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM sects WHERE is_active = TRUE')
             
@@ -127,7 +137,7 @@ class SqliteSectRepository:
 
     def update_sect(self, sect: Sect) -> bool:
         """更新宗门信息"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 UPDATE sects SET
@@ -150,7 +160,7 @@ class SqliteSectRepository:
 
     def add_user_contribution(self, user_id: str, sect_id: int, contribution: float) -> bool:
         """添加用户对宗门的贡献"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             
             # 检查是否已有贡献记录
@@ -187,7 +197,7 @@ class SqliteSectRepository:
 
     def get_user_contribution(self, user_id: str, sect_id: int) -> Optional[UserSectContribution]:
         """获取用户对特定宗门的贡献"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT * FROM user_sect_contributions 

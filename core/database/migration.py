@@ -11,6 +11,13 @@ def run_migrations(db_path: str, migrations_path: str):
     
     # 连接数据库
     conn = sqlite3.connect(db_path)
+    
+    # 配置WAL模式和其他性能优化
+    conn.execute("PRAGMA journal_mode=WAL;")  # 启用WAL模式提高并发性能
+    conn.execute("PRAGMA synchronous=NORMAL;")  # 平衡性能和数据安全
+    conn.execute("PRAGMA cache_size=10000;")  # 增加缓存大小
+    conn.execute("PRAGMA temp_store=MEMORY;")  # 在内存中存储临时数据
+    
     cursor = conn.cursor()
     
     # 创建 migrations 表来跟踪已应用的迁移

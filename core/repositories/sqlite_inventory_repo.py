@@ -9,9 +9,19 @@ class SqliteInventoryRepository:
         self.db_path = db_path
         self._init_table()
 
+    def _get_connection(self):
+        """获取数据库连接并配置WAL模式"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode=WAL;")  # 启用WAL模式
+        conn.execute("PRAGMA synchronous=NORMAL;")  # 平衡性能和数据安全
+        conn.execute("PRAGMA cache_size=10000;")  # 增加缓存大小
+        conn.execute("PRAGMA temp_store=MEMORY;")  # 在内存中存储临时数据
+        conn.row_factory = sqlite3.Row
+        return conn
+
     def _init_table(self):
         """初始化用户物品表"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS user_items (
@@ -28,7 +38,7 @@ class SqliteInventoryRepository:
 
     def add_item(self, user_id: str, item_id: int, quantity: int = 1) -> bool:
         """给用户添加物品"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             
             # 检查用户是否已有该物品
@@ -58,7 +68,7 @@ class SqliteInventoryRepository:
 
     def remove_item(self, user_id: str, item_id: int, quantity: int = 1) -> bool:
         """从用户库存中移除物品"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             
             # 检查用户是否有足够数量的物品
@@ -95,7 +105,7 @@ class SqliteInventoryRepository:
 
     def get_user_items(self, user_id: str) -> List[UserItem]:
         """获取用户的所有物品"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT id, user_id, item_id, quantity, obtained_at
@@ -117,7 +127,7 @@ class SqliteInventoryRepository:
 
     def get_user_item(self, user_id: str, item_id: int) -> Optional[UserItem]:
         """获取用户特定物品"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT id, user_id, item_id, quantity, obtained_at
