@@ -22,4 +22,3 @@ chroma
 venv/*
 pytest.ini
 core/database/__pycache__/
-*.pyc
