@@ -1,0 +1,2 @@
+# astrbot_plugin_re_xiuxian_shell
+重生之凡人修仙传
