@@ -33,7 +33,7 @@ CREATE TABLE users_new (
     total_exp_gained INTEGER DEFAULT 0
 );
 
--- 复制数据
+-- 复制数据，将原有的"炼气一层"境界保持不变，只更改默认值
 INSERT INTO users_new SELECT * FROM users;
 
 -- 删除旧表

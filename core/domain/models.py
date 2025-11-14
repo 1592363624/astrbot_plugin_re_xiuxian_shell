@@ -14,7 +14,7 @@ class User:
     
     # 修仙基本属性
     cultivation: float = 0.0               # 修为点数
-    realm: str = "炼气一层"                # 修仙境界
+    realm: str = "凡人"                   # 修仙境界
     talent: Optional[str] = None           # 灵根
     dao_name: Optional[str] = None         # 道号
     sect_id: Optional[int] = None          # 宗门ID
@@ -38,6 +38,9 @@ class User:
     total_battle_count: int = 0            # 总斗法次数
     total_battle_win_count: int = 0        # 总斗法胜利次数
     total_exp_gained: int = 0              # 总获得修为
+    
+    # 会话信息，用于发送主动消息
+    unified_msg_origin: Optional[str] = None  # 用户会话标识符
 
 
 @dataclass

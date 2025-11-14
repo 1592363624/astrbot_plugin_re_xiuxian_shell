@@ -21,8 +21,8 @@ class ArenaService:
     def battle(self, attacker: User, defender_user_id: str) -> Tuple[bool, str]:
         """斗法"""
         # 检查冷却时间
+        cooldown_seconds = self.config.get("re_xiuxian", {}).get("battle_cooldown", 300)
         if attacker.last_battle_time:
-            cooldown_seconds = self.config["arena"]["battle_cooldown"]
             if datetime.now() < attacker.last_battle_time + timedelta(seconds=cooldown_seconds):
                 remaining = (attacker.last_battle_time + timedelta(seconds=cooldown_seconds) - datetime.now()).seconds
                 return False, f"斗法冷却中，还需等待 {remaining} 秒"

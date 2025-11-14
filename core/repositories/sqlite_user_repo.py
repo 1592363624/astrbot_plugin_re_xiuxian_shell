@@ -23,6 +23,8 @@ class SqliteUserRepository:
         """初始化用户表"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            
+            # 创建用户表
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +35,7 @@ class SqliteUserRepository:
                     last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     
                     cultivation REAL DEFAULT 0,
-                    realm TEXT DEFAULT '炼气一层',
+                    realm TEXT DEFAULT '凡人',
                     talent TEXT,
                     dao_name TEXT,
                     sect_id INTEGER,
@@ -55,6 +57,14 @@ class SqliteUserRepository:
                     total_exp_gained INTEGER DEFAULT 0
                 )
             ''')
+            
+            # 检查并添加 unified_msg_origin 字段（如果不存在）
+            try:
+                cursor.execute("ALTER TABLE users ADD COLUMN unified_msg_origin TEXT")
+            except sqlite3.OperationalError:
+                # 字段已存在，忽略错误
+                pass
+                
             conn.commit()
 
     def create_user(self, user_id: str, nickname: Optional[str] = None) -> User:
@@ -79,6 +89,14 @@ class SqliteUserRepository:
             if not row:
                 return None
                 
+            # 处理可能缺少 unified_msg_origin 字段的情况
+            unified_msg_origin = None
+            try:
+                unified_msg_origin = row[24]
+            except IndexError:
+                # 字段不存在，使用默认值 None
+                pass
+                
             return User(
                 id=row[0],
                 user_id=row[1],
@@ -87,7 +105,7 @@ class SqliteUserRepository:
                 created_at=datetime.fromisoformat(row[4]) if row[4] else None,
                 last_login_at=datetime.fromisoformat(row[5]) if row[5] else None,
                 cultivation=row[6] or 0.0,
-                realm=row[7] or "炼气一层",
+                realm=row[7] or "凡人",
                 talent=row[8],
                 dao_name=row[9],
                 sect_id=row[10],
@@ -103,61 +121,121 @@ class SqliteUserRepository:
                 total_closing_count=row[20] or 0,
                 total_battle_count=row[21] or 0,
                 total_battle_win_count=row[22] or 0,
-                total_exp_gained=row[23] or 0
+                total_exp_gained=row[23] or 0,
+                unified_msg_origin=unified_msg_origin
             )
 
     def update_user(self, user: User) -> bool:
         """更新用户信息"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE users SET
-                    nickname = ?,
-                    avatar = ?,
-                    last_login_at = ?,
-                    cultivation = ?,
-                    realm = ?,
-                    talent = ?,
-                    dao_name = ?,
-                    sect_id = ?,
-                    sect_position = ?,
-                    is_hermit = ?,
-                    is_in_closing = ?,
-                    closing_start_time = ?,
-                    closing_duration = ?,
-                    deep_closing_end_time = ?,
-                    last_closing_time = ?,
-                    last_battle_time = ?,
-                    last_sect_roll_call_time = ?,
-                    total_closing_count = ?,
-                    total_battle_count = ?,
-                    total_battle_win_count = ?,
-                    total_exp_gained = ?
-                WHERE user_id = ?
-            ''', (
-                user.nickname,
-                user.avatar,
-                user.last_login_at.isoformat() if user.last_login_at else None,
-                user.cultivation,
-                user.realm,
-                user.talent,
-                user.dao_name,
-                user.sect_id,
-                user.sect_position,
-                user.is_hermit,
-                user.is_in_closing,
-                user.closing_start_time.isoformat() if user.closing_start_time else None,
-                user.closing_duration,
-                user.deep_closing_end_time.isoformat() if user.deep_closing_end_time else None,
-                user.last_closing_time.isoformat() if user.last_closing_time else None,
-                user.last_battle_time.isoformat() if user.last_battle_time else None,
-                user.last_sect_roll_call_time.isoformat() if user.last_sect_roll_call_time else None,
-                user.total_closing_count,
-                user.total_battle_count,
-                user.total_battle_win_count,
-                user.total_exp_gained,
-                user.user_id
-            ))
+            
+            # 检查表结构是否包含 unified_msg_origin 字段
+            cursor.execute("PRAGMA table_info(users)")
+            columns = [column[1] for column in cursor.fetchall()]
+            
+            if 'unified_msg_origin' in columns:
+                # 如果字段存在，更新所有字段
+                cursor.execute('''
+                    UPDATE users SET
+                        nickname = ?,
+                        avatar = ?,
+                        last_login_at = ?,
+                        cultivation = ?,
+                        realm = ?,
+                        talent = ?,
+                        dao_name = ?,
+                        sect_id = ?,
+                        sect_position = ?,
+                        is_hermit = ?,
+                        is_in_closing = ?,
+                        closing_start_time = ?,
+                        closing_duration = ?,
+                        deep_closing_end_time = ?,
+                        last_closing_time = ?,
+                        last_battle_time = ?,
+                        last_sect_roll_call_time = ?,
+                        total_closing_count = ?,
+                        total_battle_count = ?,
+                        total_battle_win_count = ?,
+                        total_exp_gained = ?,
+                        unified_msg_origin = ?
+                    WHERE user_id = ?
+                ''', (
+                    user.nickname,
+                    user.avatar,
+                    user.last_login_at.isoformat() if user.last_login_at else None,
+                    user.cultivation,
+                    user.realm,
+                    user.talent,
+                    user.dao_name,
+                    user.sect_id,
+                    user.sect_position,
+                    user.is_hermit,
+                    user.is_in_closing,
+                    user.closing_start_time.isoformat() if user.closing_start_time else None,
+                    user.closing_duration,
+                    user.deep_closing_end_time.isoformat() if user.deep_closing_end_time else None,
+                    user.last_closing_time.isoformat() if user.last_closing_time else None,
+                    user.last_battle_time.isoformat() if user.last_battle_time else None,
+                    user.last_sect_roll_call_time.isoformat() if user.last_sect_roll_call_time else None,
+                    user.total_closing_count,
+                    user.total_battle_count,
+                    user.total_battle_win_count,
+                    user.total_exp_gained,
+                    user.unified_msg_origin,
+                    user.user_id
+                ))
+            else:
+                # 如果字段不存在，只更新原有字段
+                cursor.execute('''
+                    UPDATE users SET
+                        nickname = ?,
+                        avatar = ?,
+                        last_login_at = ?,
+                        cultivation = ?,
+                        realm = ?,
+                        talent = ?,
+                        dao_name = ?,
+                        sect_id = ?,
+                        sect_position = ?,
+                        is_hermit = ?,
+                        is_in_closing = ?,
+                        closing_start_time = ?,
+                        closing_duration = ?,
+                        deep_closing_end_time = ?,
+                        last_closing_time = ?,
+                        last_battle_time = ?,
+                        last_sect_roll_call_time = ?,
+                        total_closing_count = ?,
+                        total_battle_count = ?,
+                        total_battle_win_count = ?,
+                        total_exp_gained = ?
+                    WHERE user_id = ?
+                ''', (
+                    user.nickname,
+                    user.avatar,
+                    user.last_login_at.isoformat() if user.last_login_at else None,
+                    user.cultivation,
+                    user.realm,
+                    user.talent,
+                    user.dao_name,
+                    user.sect_id,
+                    user.sect_position,
+                    user.is_hermit,
+                    user.is_in_closing,
+                    user.closing_start_time.isoformat() if user.closing_start_time else None,
+                    user.closing_duration,
+                    user.deep_closing_end_time.isoformat() if user.deep_closing_end_time else None,
+                    user.last_closing_time.isoformat() if user.last_closing_time else None,
+                    user.last_battle_time.isoformat() if user.last_battle_time else None,
+                    user.last_sect_roll_call_time.isoformat() if user.last_sect_roll_call_time else None,
+                    user.total_closing_count,
+                    user.total_battle_count,
+                    user.total_battle_win_count,
+                    user.total_exp_gained,
+                    user.user_id
+                ))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -174,6 +252,11 @@ class SqliteUserRepository:
             
             users = []
             for row in cursor.fetchall():
+                # 处理可能缺少 unified_msg_origin 字段的情况
+                unified_msg_origin = None
+                if len(row) > 24:  # 检查是否有 unified_msg_origin 字段
+                    unified_msg_origin = row[24]
+                    
                 users.append(User(
                     id=row[0],
                     user_id=row[1],
@@ -182,7 +265,7 @@ class SqliteUserRepository:
                     created_at=datetime.fromisoformat(row[4]) if row[4] else None,
                     last_login_at=datetime.fromisoformat(row[5]) if row[5] else None,
                     cultivation=row[6] or 0.0,
-                    realm=row[7] or "炼气一层",
+                    realm=row[7] or "凡人",
                     talent=row[8],
                     dao_name=row[9],
                     sect_id=row[10],
@@ -198,7 +281,54 @@ class SqliteUserRepository:
                     total_closing_count=row[20] or 0,
                     total_battle_count=row[21] or 0,
                     total_battle_win_count=row[22] or 0,
-                    total_exp_gained=row[23] or 0
+                    total_exp_gained=row[23] or 0,
+                    unified_msg_origin=unified_msg_origin
+                ))
+            
+            return users
+
+    def get_all_users_in_closing(self) -> List[User]:
+        """获取所有正在闭关的用户"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM users 
+                WHERE is_in_closing = 1
+            ''')
+            
+            users = []
+            for row in cursor.fetchall():
+                # 处理可能缺少 unified_msg_origin 字段的情况
+                unified_msg_origin = None
+                if len(row) > 24:  # 检查是否有 unified_msg_origin 字段
+                    unified_msg_origin = row[24]
+                    
+                users.append(User(
+                    id=row[0],
+                    user_id=row[1],
+                    nickname=row[2],
+                    avatar=row[3],
+                    created_at=datetime.fromisoformat(row[4]) if row[4] else None,
+                    last_login_at=datetime.fromisoformat(row[5]) if row[5] else None,
+                    cultivation=row[6] or 0.0,
+                    realm=row[7] or "凡人",
+                    talent=row[8],
+                    dao_name=row[9],
+                    sect_id=row[10],
+                    sect_position=row[11],
+                    is_hermit=bool(row[12]),
+                    is_in_closing=bool(row[13]),
+                    closing_start_time=datetime.fromisoformat(row[14]) if row[14] else None,
+                    closing_duration=row[15],
+                    deep_closing_end_time=datetime.fromisoformat(row[16]) if row[16] else None,
+                    last_closing_time=datetime.fromisoformat(row[17]) if row[17] else None,
+                    last_battle_time=datetime.fromisoformat(row[18]) if row[18] else None,
+                    last_sect_roll_call_time=datetime.fromisoformat(row[19]) if row[19] else None,
+                    total_closing_count=row[20] or 0,
+                    total_battle_count=row[21] or 0,
+                    total_battle_win_count=row[22] or 0,
+                    total_exp_gained=row[23] or 0,
+                    unified_msg_origin=unified_msg_origin
                 ))
             
             return users

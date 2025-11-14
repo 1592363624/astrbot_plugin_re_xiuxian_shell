@@ -5,8 +5,9 @@ from ..repositories.sqlite_user_repo import SqliteUserRepository
 
 
 class UserService:
-    def __init__(self, user_repo: SqliteUserRepository):
+    def __init__(self, user_repo: SqliteUserRepository, config: dict = None):
         self.user_repo = user_repo
+        self.config = config or {}
         
         # 灵根类型
         self.talent_types = [
@@ -86,10 +87,13 @@ class UserService:
         suffix = random.choice(self.dao_name_suffixes)
         dao_name = f"{prefix}{suffix}"
         
+        # 获取初始境界配置
+        initial_realm = self.config.get("re_xiuxian", {}).get("initial_realm", "炼气一层")
+        
         # 更新用户信息
         user.talent = talent_type
         user.dao_name = dao_name
-        user.realm = "炼气一层"
+        user.realm = initial_realm
         user.cultivation = 0.0
         
         return self.user_repo.update_user(user)

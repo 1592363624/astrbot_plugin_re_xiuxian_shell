@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     
     -- 修仙基本属性
     cultivation REAL DEFAULT 0,             -- 修为点数
-    realm TEXT DEFAULT '炼气一层',          -- 修仙境界
+    realm TEXT DEFAULT '凡人',              -- 修仙境界
     talent TEXT,                            -- 灵根
     dao_name TEXT,                          -- 道号
     sect_id INTEGER,                        -- 宗门ID

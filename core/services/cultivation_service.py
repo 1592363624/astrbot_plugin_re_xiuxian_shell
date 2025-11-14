@@ -18,15 +18,15 @@ class CultivationService:
         self.log_repo = log_repo
         self.config = config
 
-    def closed_door_cultivation(self, user: User) -> Tuple[bool, str]:
-        """闭关修炼"""
+    def start_closing_door_cultivation(self, user: User) -> Tuple[bool, str]:
+        """开始闭关修炼"""
         # 检查是否正在闭关
         if user.is_in_closing:
             return False, "你正在闭关中，无法再次闭关"
             
         # 检查冷却时间
         if user.last_closing_time:
-            cooldown_seconds = self.config["cultivation"]["closed_door_cooldown"]
+            cooldown_seconds = self.config.get("re_xiuxian", {}).get("closed_door_cooldown", 60)
             if self._get_current_time() < user.last_closing_time + timedelta(seconds=cooldown_seconds):
                 remaining = (user.last_closing_time + timedelta(seconds=cooldown_seconds) - self._get_current_time()).seconds
                 return False, f"闭关冷却中，还需等待 {remaining} 秒"
@@ -35,6 +35,46 @@ class CultivationService:
         if user.is_hermit and not user.realm.startswith("炼气"):
             return False, "避世状态下无法闭关修炼"
             
+        # 开始闭关（设置闭关状态和时间）
+        closing_duration = self.config.get("re_xiuxian", {}).get("closed_door_duration", 60)
+        user.is_in_closing = True
+        user.closing_start_time = self._get_current_time()
+        user.closing_duration = closing_duration
+        
+        self.user_repo.update_user(user)
+        return True, f"开始闭关修炼，需要 {closing_duration} 秒完成"
+
+    def check_closing_door_cultivation(self, user: User) -> Tuple[bool, str]:
+        """检查闭关状态"""
+        # 检查是否正在闭关
+        if not user.is_in_closing:
+            return False, "你没有在闭关修炼"
+        
+        # 检查闭关是否完成
+        if user.closing_start_time and user.closing_duration:
+            closing_end_time = user.closing_start_time + timedelta(seconds=user.closing_duration)
+            if self._get_current_time() >= closing_end_time:
+                # 闭关完成，计算结果
+                return self._complete_closing_door_cultivation(user)
+            else:
+                # 还在闭关中
+                remaining = closing_end_time - self._get_current_time()
+                return True, f"闭关修炼中，剩余时间: {remaining.seconds} 秒"
+        else:
+            # 数据异常，重置状态
+            user.is_in_closing = False
+            user.closing_start_time = None
+            user.closing_duration = None
+            self.user_repo.update_user(user)
+            return False, "闭关数据异常，已重置状态"
+
+    def _complete_closing_door_cultivation(self, user: User) -> Tuple[bool, str]:
+        """完成闭关修炼"""
+        # 重置闭关状态
+        user.is_in_closing = False
+        user.closing_start_time = None
+        user.closing_duration = None
+        
         # 随机闭关结果
         rand = random.random()
         if rand < 0.7:  # 70% 成功
@@ -76,13 +116,13 @@ class CultivationService:
             
         # 检查冷却时间
         if user.last_closing_time:
-            cooldown_seconds = self.config["cultivation"]["deep_closed_door_cooldown"]
+            cooldown_seconds = self.config.get("re_xiuxian", {}).get("deep_closed_door_cooldown", 79200)
             if self._get_current_time() < user.last_closing_time + timedelta(seconds=cooldown_seconds):
                 remaining = (user.last_closing_time + timedelta(seconds=cooldown_seconds) - self._get_current_time()).seconds
                 return False, f"深度闭关冷却中，还需等待 {remaining} 秒"
         
         # 开始深度闭关
-        duration = self.config["cultivation"]["deep_closed_door_duration"]
+        duration = self.config.get("re_xiuxian", {}).get("deep_closed_door_duration", 28800)
         user.deep_closing_end_time = self._get_current_time() + timedelta(seconds=duration)
         user.last_closing_time = self._get_current_time()
         
@@ -121,7 +161,7 @@ class CultivationService:
         # 强行出关，只获得部分收益
         remaining_time = user.deep_closing_end_time - self._get_current_time()
         completed_ratio = 1 - (remaining_time.total_seconds() / 
-                              self.config["cultivation"]["deep_closed_door_duration"])
+                              self.config.get("re_xiuxian", {}).get("deep_closed_door_duration", 28800))
         
         # 按完成比例计算收益，但有折扣
         exp_gain = int(self._calculate_deep_exp_gain(user) * completed_ratio * 0.7)
@@ -156,7 +196,7 @@ class CultivationService:
 
     def _calculate_exp_gain(self, user: User) -> int:
         """计算普通闭关获得的修为"""
-        base_gain = self.config["cultivation"]["base_exp_gain"]
+        base_gain = self.config.get("re_xiuxian", {}).get("base_exp_gain", 10)
         
         # 根据境界调整
         realm_multiplier = 1.0
@@ -185,8 +225,8 @@ class CultivationService:
     def _calculate_deep_exp_gain(self, user: User) -> int:
         """计算深度闭关获得的修为"""
         # 深度闭关相当于多次普通闭关
-        duration = self.config["cultivation"]["deep_closed_door_duration"]
-        base_cooldown = self.config["cultivation"]["closed_door_cooldown"]
+        duration = self.config.get("re_xiuxian", {}).get("deep_closed_door_duration", 28800)
+        base_cooldown = self.config.get("re_xiuxian", {}).get("closed_door_cooldown", 60)
         
         # 计算相当于多少次普通闭关
         times = duration // base_cooldown

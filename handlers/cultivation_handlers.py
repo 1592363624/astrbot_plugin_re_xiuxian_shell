@@ -38,6 +38,16 @@ async def my_talent(plugin, event: AstrMessageEvent) -> AsyncGenerator[MessageEv
         yield event.plain_result("你尚未踏入修仙之路，请先使用「检测灵根」命令")
         return
     
+    # 检查闭关状态
+    if user.is_in_closing:
+        success, message = plugin.cultivation_service.check_closing_door_cultivation(user)
+        if success and "剩余时间" in message:
+            # 仍在闭关中
+            pass
+        else:
+            # 闭关已完成
+            yield event.plain_result(message)
+    
     # 获取宗门信息
     sect_name = "无"
     if user.sect_id:
@@ -60,6 +70,8 @@ async def my_talent(plugin, event: AstrMessageEvent) -> AsyncGenerator[MessageEv
     
     if user.deep_closing_end_time and user.deep_closing_end_time > datetime.now():
         profile += "状态：深度闭关中\n"
+    elif user.is_in_closing:
+        profile += "状态：闭关修炼中\n"
     
     yield event.plain_result(profile)
 
@@ -77,9 +89,34 @@ async def closed_door_cultivation(plugin, event: AstrMessageEvent) -> AsyncGener
         yield event.plain_result("你尚未踏入修仙之路，请先使用「检测灵根」命令")
         return
     
-    # 闭关修炼
-    success, message = plugin.cultivation_service.closed_door_cultivation(user)
-    yield event.plain_result(message)
+    # 如果已经在闭关，检查闭关状态
+    if user.is_in_closing:
+        success, message = plugin.cultivation_service.check_closing_door_cultivation(user)
+        yield event.plain_result(message)
+    else:
+        # 开始闭关修炼
+        success, message = plugin.cultivation_service.start_closing_door_cultivation(user)
+        if success:
+            # 启动定时任务来自动完成闭关
+            import asyncio
+            from datetime import timedelta
+            
+            # 计算剩余时间
+            end_time = user.closing_start_time + timedelta(seconds=user.closing_duration)
+            delay = (end_time - plugin.cultivation_service._get_current_time()).total_seconds()
+            
+            # 保存用户的 unified_msg_origin 用于后续发送消息
+            user.unified_msg_origin = event.unified_msg_origin
+            plugin.user_repo.update_user(user)
+            
+            # 创建并保存定时任务
+            if user_id in plugin.cultivation_tasks:
+                plugin.cultivation_tasks[user_id].cancel()
+            
+            task = asyncio.create_task(plugin._cultivation_timer(user, delay, user_id))
+            plugin.cultivation_tasks[user_id] = task
+            
+        yield event.plain_result(message)
 
 
 async def deep_closed_door(plugin, event: AstrMessageEvent) -> AsyncGenerator[MessageEventResult, None]:

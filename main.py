@@ -57,23 +57,7 @@ class XiuxianPlugin(Star):
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         
         # --- 配置 ---
-        xiuxian_config = config.get("re_xiuxian", {})
-        self.game_config = {
-            "cultivation": {
-                "base_exp_gain": xiuxian_config.get("base_exp_gain", 10),
-                "closed_door_cooldown": xiuxian_config.get("closed_door_cooldown", 600),  # 10分钟
-                "deep_closed_door_duration": xiuxian_config.get("deep_closed_door_duration", 28800),  # 8小时
-                "deep_closed_door_cooldown": xiuxian_config.get("deep_closed_door_cooldown", 79200),  # 22小时
-            },
-            "sect": {
-                "default_sects": xiuxian_config.get("default_sects", [
-                    "黄枫谷", "太一门", "合欢宗", "星宫", "万灵宗", "黑煞教"
-                ])
-            },
-            "arena": {
-                "battle_cooldown": xiuxian_config.get("battle_cooldown", 300)  # 5分钟
-            }
-        }
+        self.config = config
         
         # 初始化数据库模式
         plugin_root_dir = os.path.dirname(__file__)
@@ -88,30 +72,30 @@ class XiuxianPlugin(Star):
         self.log_repo = SqliteLogRepository(db_path)
         
         # --- 实例化服务层 ---
-        self.user_service = UserService(self.user_repo)
+        self.user_service = UserService(self.user_repo, self.config)
         self.cultivation_service = CultivationService(
             self.user_repo, 
             self.inventory_repo, 
             self.log_repo, 
-            self.game_config
+            self.config
         )
         self.inventory_service = InventoryService(
             self.inventory_repo,
             self.user_repo,
             self.item_repo,
-            self.game_config
+            self.config
         )
         self.sect_service = SectService(
             self.sect_repo,
             self.user_repo,
             self.inventory_repo,
-            self.game_config
+            self.config
         )
         self.arena_service = ArenaService(
             self.user_repo,
             self.inventory_repo,
             self.log_repo,
-            self.game_config
+            self.config
         )
         
         # --- 初始化核心游戏数据 ---
@@ -119,6 +103,9 @@ class XiuxianPlugin(Star):
             self.item_repo, self.sect_repo
         )
         data_setup_service.setup_initial_data()
+        
+        # 添加一个任务列表来跟踪闭关用户
+        self.cultivation_tasks = {}
         
         logger.info("修仙插件初始化完成")
 
@@ -134,7 +121,63 @@ class XiuxianPlugin(Star):
         
         修仙插件加载成功！
         """)
-    
+        
+        # 启动时检查是否有正在进行的闭关
+        await self._check_ongoing_cultivations()
+
+    async def _check_ongoing_cultivations(self):
+        """检查并恢复正在进行的闭关任务"""
+        try:
+            users = self.user_repo.get_all_users_in_closing()
+            for user in users:
+                if user.is_in_closing and user.closing_start_time and user.closing_duration:
+                    # 计算剩余时间
+                    end_time = user.closing_start_time + timedelta(seconds=user.closing_duration)
+                    remaining_time = (end_time - datetime.now()).total_seconds()
+                    
+                    if remaining_time <= 0:
+                        # 闭关已完成，立即处理
+                        await self._complete_cultivation(user, user.user_id)
+                    else:
+                        # 重新启动定时任务
+                        task = asyncio.create_task(self._cultivation_timer(user, remaining_time, user.user_id))
+                        self.cultivation_tasks[user.user_id] = task
+        except Exception as e:
+            logger.error(f"检查正在进行的闭关时出错: {e}")
+
+    async def _cultivation_timer(self, user: object, delay: float, user_id: str):
+        """闭关定时器"""
+        try:
+            await asyncio.sleep(delay)
+            await self._complete_cultivation(user, user_id)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"闭关定时器出错: {e}")
+        finally:
+            # 清理任务
+            if user_id in self.cultivation_tasks:
+                del self.cultivation_tasks[user_id]
+
+    async def _complete_cultivation(self, user: object, user_id: str):
+        """完成闭关修炼并发送消息"""
+        try:
+            # 调用服务完成闭关
+            success, message = self.cultivation_service._complete_closing_door_cultivation(user)
+            
+            # 发送通知消息给用户
+            if success and user.unified_msg_origin:
+                try:
+                    # 使用 context.send_message 发送主动消息
+                    await self.context.send_message(user.unified_msg_origin, MessageChain().message(message))
+                    logger.info(f"已向用户 {user_id} 发送闭关完成通知")
+                except Exception as e:
+                    logger.error(f"向用户 {user_id} 发送闭关完成通知失败: {e}")
+            elif success:
+                logger.info(f"用户 {user_id} 闭关完成: {message} (无法发送主动消息，缺少 unified_msg_origin)")
+        except Exception as e:
+            logger.error(f"完成闭关时出错: {e}")
+
     # =========== 修仙基础命令 ==========
 
     @filter.command("检测灵根")
