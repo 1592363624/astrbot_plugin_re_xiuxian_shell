@@ -1,0 +1,44 @@
+{
+  "xiuxian": {
+    "description": "修仙系统配置",
+    "type": "object",
+    "items": {
+      "base_exp_gain": {
+        "description": "基础修炼获得的修为点数",
+        "type": "int",
+        "hint": "每次闭关修炼获得的基础修为点数",
+        "default": 10
+      },
+      "closed_door_cooldown": {
+        "description": "闭关修炼冷却时间",
+        "type": "int",
+        "hint": "每次闭关修炼后的冷却时间，单位为秒",
+        "default": 600
+      },
+      "deep_closed_door_duration": {
+        "description": "深度闭关时长",
+        "type": "int",
+        "hint": "深度闭关的持续时间，单位为秒",
+        "default": 28800
+      },
+      "deep_closed_door_cooldown": {
+        "description": "深度闭关冷却时间",
+        "type": "int",
+        "hint": "深度闭关后的冷却时间，单位为秒",
+        "default": 79200
+      },
+      "default_sects": {
+        "description": "默认宗门列表",
+        "type": "list",
+        "hint": "系统默认的宗门列表",
+        "default": ["黄枫谷", "太一门", "合欢宗", "星宫", "万灵宗", "黑煞教"]
+      },
+      "battle_cooldown": {
+        "description": "斗法冷却时间",
+        "type": "int",
+        "hint": "每次斗法后的冷却时间，单位为秒",
+        "default": 300
+      }
+    }
+  }
+}
